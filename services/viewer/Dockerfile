@@ -14,6 +14,7 @@ FROM alpine:3.22
 WORKDIR /app
 COPY --from=build /viewer /viewer
 COPY observatory/isotopes.json /app/observatory/isotopes.json
+COPY CREDITS.md /app/CREDITS.md
 ENV GATEWAY_URL=http://gateway:8080
 EXPOSE 8090
 USER 65532:65532
