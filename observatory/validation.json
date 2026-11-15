@@ -1,0 +1,149 @@
+{
+  "description": "Ground-state partial half-life comparison; errors are log10(prediction/reference).",
+  "inputs": {
+    "l": 0,
+    "radius_fm": 9.0,
+    "preformation": 0.1,
+    "assault_hz": 1e+21
+  },
+  "metrics": {
+    "baseline": {
+      "count": 11,
+      "mae_log10": 0.754670269966919,
+      "rmse_log10": 0.7895899246660505
+    },
+    "research": {
+      "count": 11,
+      "mae_log10": 0.2707674101121393,
+      "rmse_log10": 0.29927029295944235
+    },
+    "shell": {
+      "count": 11,
+      "mae_log10": 0.10909049316888667,
+      "rmse_log10": 0.11820109101223188
+    }
+  },
+  "nuclides": [
+    {
+      "isotope": "Sm-146",
+      "reference_log10_s": 15.462891794430783,
+      "qi_extrapolation": true,
+      "baseline_log10_s": 14.910039842745345,
+      "research_log10_s": 15.41765823390649,
+      "baseline_error": -0.5528519516854384,
+      "research_error": -0.04523356052429328,
+      "shell_log10_s": 15.426212178308992,
+      "shell_error": -0.03667961612179127
+    },
+    {
+      "isotope": "Sm-148",
+      "reference_log10_s": 23.298853076409706,
+      "qi_extrapolation": true,
+      "baseline_log10_s": 22.97282926274092,
+      "research_log10_s": 23.13804213104063,
+      "baseline_error": -0.32602381366878674,
+      "research_error": -0.16081094536907514,
+      "shell_log10_s": 23.361689103742023,
+      "shell_error": 0.06283602733231675
+    },
+    {
+      "isotope": "Po-212",
+      "reference_log10_s": -6.5300307905000405,
+      "qi_extrapolation": false,
+      "baseline_log10_s": -6.114907855345686,
+      "research_log10_s": -6.630368823101762,
+      "baseline_error": 0.41512293515435417,
+      "research_error": -0.10033803260172114,
+      "shell_log10_s": -6.500350233085147,
+      "shell_error": 0.029680557414893727
+    },
+    {
+      "isotope": "Po-214",
+      "reference_log10_s": -3.785110548637486,
+      "qi_extrapolation": false,
+      "baseline_log10_s": -3.1633602511717633,
+      "research_log10_s": -3.6150879626890493,
+      "baseline_error": 0.6217502974657227,
+      "research_error": 0.17002258594843678,
+      "shell_log10_s": -3.6258819279421783,
+      "shell_error": 0.15922862069530774
+    },
+    {
+      "isotope": "Po-216",
+      "reference_log10_s": -0.8386237460914778,
+      "qi_extrapolation": false,
+      "baseline_log10_s": -0.14301548183454216,
+      "research_log10_s": -0.5827663016581681,
+      "baseline_error": 0.6956082642569357,
+      "research_error": 0.2558574444333097,
+      "shell_log10_s": -0.7130520387183693,
+      "shell_error": 0.12557170737310852
+    },
+    {
+      "isotope": "Rn-220",
+      "reference_log10_s": 1.745611041907267,
+      "qi_extrapolation": false,
+      "baseline_log10_s": 2.6881095821242553,
+      "research_log10_s": 2.1860543146369658,
+      "baseline_error": 0.9424985402169883,
+      "research_error": 0.44044327272969874,
+      "shell_log10_s": 1.918485502292407,
+      "shell_error": 0.17287446038513998
+    },
+    {
+      "isotope": "Rn-222",
+      "reference_log10_s": 5.5188615145118085,
+      "qi_extrapolation": false,
+      "baseline_log10_s": 6.477065496936795,
+      "research_log10_s": 5.913793668935931,
+      "baseline_error": 0.9582039824249868,
+      "research_error": 0.3949321544241222,
+      "shell_log10_s": 5.617357743349625,
+      "shell_error": 0.09849622883781617
+    },
+    {
+      "isotope": "Ra-220",
+      "reference_log10_s": -1.7427821636176568,
+      "qi_extrapolation": false,
+      "baseline_log10_s": -0.8411818165207414,
+      "research_log10_s": -1.3660692750706893,
+      "baseline_error": 0.9016003470969154,
+      "research_error": 0.3767128885469675,
+      "shell_log10_s": -1.605192370304641,
+      "shell_error": 0.1375897933130159
+    },
+    {
+      "isotope": "Ra-222",
+      "reference_log10_s": 1.5400155003390787,
+      "qi_extrapolation": false,
+      "baseline_log10_s": 2.4692415958696685,
+      "research_log10_s": 1.9311118911006382,
+      "baseline_error": 0.9292260955305898,
+      "research_error": 0.39109639076155944,
+      "shell_log10_s": 1.6774173136460144,
+      "shell_error": 0.13740181330693568
+    },
+    {
+      "isotope": "Ra-224",
+      "reference_log10_s": 5.519571918527913,
+      "qi_extrapolation": false,
+      "baseline_log10_s": 6.462561051119561,
+      "research_log10_s": 5.866501880766371,
+      "baseline_error": 0.9429891325916477,
+      "research_error": 0.34692996223845807,
+      "shell_log10_s": 5.627565922372916,
+      "shell_error": 0.10799400384500313
+    },
+    {
+      "isotope": "Ra-226",
+      "reference_log10_s": 10.730903379011188,
+      "qi_extrapolation": false,
+      "baseline_log10_s": 11.746400988554932,
+      "research_log10_s": 11.026967652667079,
+      "baseline_error": 1.0154976095437434,
+      "research_error": 0.2960642736558903,
+      "shell_log10_s": 10.862545975243613,
+      "shell_error": 0.13164259623242458
+    }
+  ]
+}
