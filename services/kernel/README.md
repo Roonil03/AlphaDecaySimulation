@@ -20,3 +20,5 @@ The WKB penetrability and centrifugal convention are consistent with [CPC WKB tr
 
 Run tests locally with `cargo test --release`. A repeatable single-thread numerical timing (no HTTP) is `cargo test --release benchmark -- --ignored --nocapture`; it evaluates the U-238 example above 10,000 times. Report architecture, CPU, compiler and elapsed time with results. For Docker, use the build stage: `docker build --target build -t alpha-kernel-build services/kernel`, then `docker run --rm alpha-kernel-build cargo test --release benchmark -- --ignored --nocapture`.
 
+
+Recorded benchmark: 10,000 calls in 1,240 ms (124,000 ns/call), Linux x86-64 Docker Desktop on an 11th Gen Intel Core i9-11900H @ 2.50 GHz, Rust 1.85.1, release profile. This is one run, not an HTTP throughput measurement or a speedup comparison.
