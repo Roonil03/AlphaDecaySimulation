@@ -13,7 +13,8 @@ jobs:
           python-version: '3.12'
       - name: Portable client tests
         run: python -m unittest discover -s tests -p 'test_*.py' -v
-      - name: Build and start services
+      - name: Build, test, and start services
+        # Image builds run Go, Elixir, and locked Rust release numerical tests.
         run: docker compose up --build -d
       - name: Exercise real services
         run: python -m unittest discover -s tests -p 'integration.py' -v
