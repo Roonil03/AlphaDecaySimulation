@@ -799,7 +799,8 @@ namespace AlphaPlanetarium
             time.Value = time.Maximum;
             Require(!playing, "manual navigation to the end stops playback");
             time.Value = 1;
-            Require(clock.Text.EndsWith("half-life") && status.Text.Contains("expected 90.0"), "one-half-life expectation and units");
+            string expected = "expected " + (particles.Count * .5).ToString("0.0", CultureInfo.CurrentCulture);
+            Require(clock.Text.EndsWith("half-life") && status.Text.Contains(expected), "one-half-life expectation and units");
         }
 
         static void Require(bool condition, string message)
@@ -1037,10 +1038,17 @@ namespace AlphaPlanetarium
                     return 1;
                 Application testApplication = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                 WindowMain testWindow = null;
+                CultureInfo originalCulture = System.Threading.Thread.CurrentThread.CurrentCulture;
                 try
                 {
-                    testWindow = new WindowMain();
-                    testWindow.VerifyInteractionState();
+                    foreach (CultureInfo culture in new[] { CultureInfo.InvariantCulture, new CultureInfo("de-DE") })
+                    {
+                        System.Threading.Thread.CurrentThread.CurrentCulture = culture;
+                        testWindow = new WindowMain();
+                        testWindow.VerifyInteractionState();
+                        testWindow.CloseTestWindow();
+                        testWindow = null;
+                    }
                     return 0;
                 }
                 catch (Exception error)
@@ -1050,6 +1058,7 @@ namespace AlphaPlanetarium
                 }
                 finally
                 {
+                    System.Threading.Thread.CurrentThread.CurrentCulture = originalCulture;
                     if (testWindow != null) testWindow.CloseTestWindow();
                     testApplication.Shutdown();
                 }
