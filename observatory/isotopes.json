@@ -1,5 +1,31 @@
 [
   {
+    "symbol": "Dy", "z": 66, "a": 154, "q_mev": 2.94511,
+    "total_half_life_s": 44180640000000.0, "ground_state_branch_fraction": 1,
+    "partial_half_life_s": 44180640000000.0,
+    "source_url": "https://www.nature.com/articles/s41598-022-12684-6",
+    "branch_source_url": "https://www.nndc.bnl.gov/ensnds/150/Gd/a_decay.pdf",
+    "parent_binding_mev": 1261.74205306, "binding_extrapolated": false,
+    "validation_group": "ren_holdout",
+    "holdout_reason": "NUBASE2020 half-life 3.0 ± 1.5 My fails Ren's strict below-50% uncertainty criterion; not one of the 11 later additions.",
+    "half_life_uncertainty_s": 2524608000000.0, "q_uncertainty_mev": 0.00495,
+    "branch_note": "Only ground-state alpha line observed; 100% approximation.",
+    "binding_note": "Derived from NUBASE2020 atomic mass excess -70.394(7) MeV and hydrogen/neutron mass excesses."
+  },
+  {
+    "symbol": "Os", "z": 76, "a": 186, "q_mev": 2.8212,
+    "total_half_life_s": 6.31152e22, "ground_state_branch_fraction": 1,
+    "partial_half_life_s": 6.31152e22,
+    "source_url": "https://www-nds.iaea.org/amdc/ame2020/NUBASE2020.pdf",
+    "branch_source_url": "https://arxiv.org/abs/2009.01508",
+    "parent_binding_mev": 1484.80675736, "binding_extrapolated": false,
+    "validation_group": "ren_holdout",
+    "holdout_reason": "NUBASE2020 half-life 2.0 ± 1.1 Py fails Ren's below-50% uncertainty criterion; not one of the 11 later additions.",
+    "half_life_uncertainty_s": 3.471336e22, "q_uncertainty_mev": 0.00087,
+    "branch_note": "Ground-state fraction approximated as 100%; first excited-state partial half-life exceeds 3.3e17 y at 90% CL.",
+    "binding_note": "Derived from NUBASE2020 atomic mass excess -43.0000(8) MeV and hydrogen/neutron mass excesses."
+  },
+  {
     "symbol": "Sm",
     "z": 62,
     "a": 146,

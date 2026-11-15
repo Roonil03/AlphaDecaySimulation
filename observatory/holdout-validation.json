@@ -1,0 +1,52 @@
+{
+  "description": "Ground-state partial half-life comparison; errors are log10(prediction/reference).",
+  "validation_group": "ren_holdout",
+  "limitations": "Excluded from Ren half-life fit by its published uncertainty selection; measured masses are inputs, uncertainty is not propagated, and this is a small selected sample. Qi fit independence is not established.",
+  "inputs": {
+    "l": 0,
+    "radius_fm": 9.0,
+    "preformation": 0.1,
+    "assault_hz": 1e+21
+  },
+  "metrics": {
+    "baseline": {
+      "count": 2,
+      "mae_log10": 0.3196514337877163,
+      "rmse_log10": 0.3200761940830128
+    },
+    "research": {
+      "count": 2,
+      "mae_log10": 0.39749665699079895,
+      "rmse_log10": 0.48357903113389256
+    },
+    "shell": {
+      "count": 2,
+      "mae_log10": 0.17995929937120803,
+      "rmse_log10": 0.18647610581167523
+    }
+  },
+  "nuclides": [
+    {
+      "isotope": "Dy-154",
+      "reference_log10_s": 13.645232002763466,
+      "qi_extrapolation": true,
+      "baseline_log10_s": 13.309096306901768,
+      "research_log10_s": 13.76732879222791,
+      "baseline_error": -0.33613569586169767,
+      "research_error": 0.12209678946444491,
+      "shell_log10_s": 13.51413975372795,
+      "shell_error": -0.13109224903551642
+    },
+    {
+      "isotope": "Os-186",
+      "reference_log10_s": 22.800133962749207,
+      "qi_extrapolation": true,
+      "baseline_log10_s": 22.496966791035472,
+      "research_log10_s": 22.127237438232054,
+      "baseline_error": -0.303167171713735,
+      "research_error": -0.672896524517153,
+      "shell_log10_s": 22.571307613042308,
+      "shell_error": -0.22882634970689963
+    }
+  ]
+}

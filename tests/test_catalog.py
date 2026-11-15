@@ -34,10 +34,21 @@ class CatalogTest(unittest.TestCase):
             return {'log10_half_life_s': 1, 'research_log10_half_life_s': 2, 'shell_log10_half_life_s': 3}
         with patch('observatory.__main__.ready'), patch('observatory.__main__.request_when_ready', side_effect=fake):
             result = validate('http://test')
-        self.assertEqual(result['metrics']['shell']['count'], len(catalog()))
+        self.assertEqual(result['metrics']['shell']['count'], 13)
         first = result['nuclides'][0]
-        self.assertAlmostEqual(first['shell_error'], 3 - math.log10(catalog()[0]['partial_half_life_s']))
+        legacy = [x for x in catalog() if x.get('validation_group', 'legacy') == 'legacy']
+        self.assertAlmostEqual(first['shell_error'], 3 - math.log10(legacy[0]['partial_half_life_s']))
         self.assertTrue(first['qi_extrapolation'])
+
+    def test_holdout_is_reported_separately(self):
+        def fake(base, path, payload):
+            return {'log10_half_life_s': 1, 'research_log10_half_life_s': 2, 'shell_log10_half_life_s': 3}
+        with patch('observatory.__main__.ready'), patch('observatory.__main__.request_when_ready', side_effect=fake):
+            result = validate('http://test', 'ren_holdout')
+        self.assertEqual([x['isotope'] for x in result['nuclides']], ['Dy-154', 'Os-186'])
+        self.assertEqual(result['metrics']['shell']['count'], 2)
+        self.assertAlmostEqual(result['nuclides'][0]['shell_error'], 3 - math.log10(44180640000000.0))
+        self.assertIn('Qi fit independence is not established', result['limitations'])
 
     def test_cli_sweep_endpoints_and_baseline_wire_compatibility(self):
         for q, model in (('0.11', 'baseline'), ('99.9', 'research')):
