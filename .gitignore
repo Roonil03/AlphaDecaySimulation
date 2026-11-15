@@ -3,3 +3,6 @@ venv/
 .venv/
 __pycache__/
 *.py[cod]
+/dist/
+/desktop/*.exe
+/preview*.png

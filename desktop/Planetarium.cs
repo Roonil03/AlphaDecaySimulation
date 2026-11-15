@@ -19,6 +19,7 @@ namespace AlphaPlanetarium
         public string symbol { get; set; }
         public int z { get; set; }
         public int a { get; set; }
+        public int l { get; set; }
         public double q_mev { get; set; }
         public double total_half_life_s { get; set; }
         public double ground_state_branch_fraction { get; set; }
@@ -33,6 +34,8 @@ namespace AlphaPlanetarium
         public double? q_uncertainty_mev { get; set; }
         public string branch_note { get; set; }
         public string binding_note { get; set; }
+        public double? binding_uncertainty_mev { get; set; }
+        public string binding_source_url { get; set; }
 
         public override string ToString()
         {
@@ -53,14 +56,59 @@ namespace AlphaPlanetarium
         public double? qi, ren;
     }
 
+    static class EmbeddedData
+    {
+        public static T Read<T>(string name)
+        {
+            using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name))
+            {
+                if (stream == null)
+                    throw new InvalidOperationException("Missing embedded data: " + name);
+                using (StreamReader reader = new StreamReader(stream))
+                    return new JavaScriptSerializer().Deserialize<T>(reader.ReadToEnd());
+            }
+        }
+    }
+
+    class ValidationInputs
+    {
+        public int l { get; set; }
+        public double radius_fm { get; set; }
+        public double preformation { get; set; }
+        public double assault_hz { get; set; }
+    }
+
+    class ValidationRow
+    {
+        public string isotope { get; set; }
+        public double reference_log10_s { get; set; }
+        public double baseline_log10_s { get; set; }
+        public double research_log10_s { get; set; }
+        public double? shell_log10_s { get; set; }
+    }
+
+    class ValidationReport
+    {
+        public ValidationInputs inputs { get; set; }
+        public List<ValidationRow> nuclides { get; set; }
+    }
+
     static class Science
     {
         const double H = 197.3269804, AMU = 931.49410242, E2 = 1.43996448;
         public static Result Calculate(Inputs x)
         {
-            if (x.z < 3 || x.z > 130 || x.a < 5 || x.a > 400 || x.a - x.z < 2 || x.l < 0 || x.l > 100 || !Finite(x.q) || x.q < .01 || x.q > 100 || !Finite(x.r) || x.r < .1 || x.r > 100 || !Finite(x.p) || x.p <= 0 || x.p > 1 || !Finite(x.h) || x.h < 1e-300 || x.h > 1e30 || (x.binding.HasValue && (!Finite(x.binding.Value) || x.binding <= 0 || x.binding > 10000)))
+            if (x.z < 3 || x.z > 130 || x.a < 5 || x.a > 400 || x.a - x.z < 2 ||
+                x.l < 0 || x.l > 100 || !Finite(x.q) || x.q < .01 || x.q > 100 ||
+                !Finite(x.r) || x.r < .1 || x.r > 100 || !Finite(x.p) || x.p <= 0 || x.p > 1 ||
+                !Finite(x.h) || x.h < 1e-300 || x.h > 1e30 ||
+                (x.binding.HasValue && (!Finite(x.binding.Value) || x.binding <= 0 || x.binding > 10000)))
                 throw new ArgumentException("Inputs outside kernel domain. See desktop README.");
-            double mu = AMU * 4 * (x.a - 4.0) / x.a, c = 2 * (x.z - 2) * E2, d = H * H * x.l * (x.l + 1) / (2 * mu), b = (c + Math.Sqrt(c * c + 4 * x.q * d)) / (2 * x.q), sum = 0;
+            double mu = AMU * 4 * (x.a - 4.0) / x.a;
+            double c = 2 * (x.z - 2) * E2;
+            double d = H * H * x.l * (x.l + 1) / (2 * mu);
+            double b = (c + Math.Sqrt(c * c + 4 * x.q * d)) / (2 * x.q);
+            double sum = 0;
             if (x.r < b)
             {
                 double lr = Math.Log(b / x.r);
@@ -81,12 +129,19 @@ namespace AlphaPlanetarium
             y.baseline = Math.Log10(Math.Log(2)) - Math.Log10(x.p) - Math.Log10(x.h) - y.logP;
             if (x.z % 2 == 0 && (x.a - x.z) % 2 == 0 && x.l == 0)
             {
-                double ad = x.a - 4.0, ar = 4 * ad / x.a, cp = 2 * (x.z - 2);
-                y.qi = .4065 * cp * Math.Sqrt(ar / x.q) - .4311 * Math.Sqrt(ar * cp * (Math.Pow(ad, 1.0 / 3) + Math.Pow(4, 1.0 / 3))) - 20.7889;
+                double ad = x.a - 4.0;
+                double ar = 4 * ad / x.a;
+                double cp = 2 * (x.z - 2);
+                y.qi = .4065 * cp * Math.Sqrt(ar / x.q) -
+                    .4311 * Math.Sqrt(ar * cp * (Math.Pow(ad, 1.0 / 3) + Math.Pow(4, 1.0 / 3))) - 20.7889;
                 if (x.binding.HasValue)
                 {
-                    double a = x.a, z = x.z, ld = 15.5287 * a - 16.9043 * Math.Pow(a, 2.0 / 3) - 91.9686 * Math.Pow(a / 2 - z, 2) / a - .7025 * z * z / Math.Pow(a, 1.0 / 3) + 12.4439 / Math.Sqrt(a);
-                    y.ren = -28.1919 - 1.0853 * Math.Pow(a, 1.0 / 6) * Math.Sqrt(z) + 1.6260 * z / Math.Sqrt(x.q) + .1078 * (x.binding.Value - ld - 2);
+                    double a = x.a, z = x.z;
+                    double ld = 15.5287 * a - 16.9043 * Math.Pow(a, 2.0 / 3) -
+                        91.9686 * Math.Pow(a / 2 - z, 2) / a - .7025 * z * z / Math.Pow(a, 1.0 / 3) +
+                        12.4439 / Math.Sqrt(a);
+                    y.ren = -28.1919 - 1.0853 * Math.Pow(a, 1.0 / 6) * Math.Sqrt(z) +
+                        1.6260 * z / Math.Sqrt(x.q) + .1078 * (x.binding.Value - ld - 2);
                 }
             }
 
@@ -135,13 +190,49 @@ namespace AlphaPlanetarium
                 Check(Math.Abs(y.logP + 2 * action / Math.Log(10)) < 1e-6, "extreme analytic Coulomb");
                 x.r = 100; x.q = 100;
                 Check(Calculate(x).logP == 0, "no forbidden interval");
-                Check(Math.Abs(Math.Pow(2, -1) - .5) < 1e-15, "survival");
+                CheckEmbeddedReports();
                 return 0;
             }
             catch (Exception e)
             {
                 System.Diagnostics.Debug.WriteLine(e.ToString());
                 return 1;
+            }
+        }
+
+        static void CheckEmbeddedReports()
+        {
+            List<Isotope> catalog = EmbeddedData.Read<List<Isotope>>("Isotopes.json");
+            Check(catalog.Count == 15, "embedded catalog count");
+            foreach (string name in new[] { "Validation.json", "HoldoutValidation.json" })
+            {
+                ValidationReport report = EmbeddedData.Read<ValidationReport>(name);
+                Check(report.nuclides.Count == (name == "Validation.json" ? 13 : 2), "embedded report count");
+                foreach (ValidationRow row in report.nuclides)
+                {
+                    Isotope isotope = catalog.Find(item => item.ToString() == row.isotope);
+                    Check(isotope != null, "catalog channel " + row.isotope);
+                    Inputs input = new Inputs
+                    {
+                        z = isotope.z, a = isotope.a, q = isotope.q_mev, l = report.inputs.l,
+                        r = report.inputs.radius_fm, p = report.inputs.preformation,
+                        h = report.inputs.assault_hz, binding = isotope.parent_binding_mev
+                    };
+                    Result predicted = Calculate(input);
+                    Check(Math.Abs(predicted.baseline - row.baseline_log10_s) < 1e-7, row.isotope + " WKB reference");
+                    Check(predicted.qi.HasValue && Math.Abs(predicted.qi.Value - row.research_log10_s) < 1e-9, row.isotope + " Qi reference");
+                    Check(predicted.ren.HasValue && row.shell_log10_s.HasValue &&
+                        Math.Abs(predicted.ren.Value - row.shell_log10_s.Value) < 1e-9, row.isotope + " Ren reference");
+                    Check(Math.Abs(Math.Log10(isotope.partial_half_life_s) - row.reference_log10_s) < 1e-12,
+                        row.isotope + " measured reference");
+                }
+            }
+            foreach (string id in new[] { "Dy-154", "Os-186" })
+            {
+                Isotope isotope = catalog.Find(item => item.ToString() == id);
+                Check(isotope != null && isotope.validation_group == "ren_holdout", id + " holdout embedded");
+                Check(isotope.half_life_uncertainty_s > 0 && isotope.q_uncertainty_mev > 0 &&
+                    isotope.binding_uncertainty_mev > 0, id + " uncertainty metadata embedded");
             }
         }
 
@@ -159,7 +250,7 @@ namespace AlphaPlanetarium
         TextBox z, a, q, l, r, p, h, binding;
         TextBlock facts, estimates, status, clock;
         Slider time;
-        Button play;
+        Button play, reset, view;
         Viewport3D viewport;
         PerspectiveCamera camera;
         Model3DGroup scene;
@@ -175,7 +266,9 @@ namespace AlphaPlanetarium
         Point drag;
         bool dragging;
         Isotope selected;
+        Isotope reference;
         Result result;
+        Inputs currentInputs;
         static Brush Brush(string c)
         {
             return (Brush)new BrushConverter().ConvertFrom(c);
@@ -193,13 +286,39 @@ namespace AlphaPlanetarium
 
         static string Duration(double logSeconds)
         {
-            double year = Math.Log10(31557600.0);
-            if (logSeconds >= year + 9) return "10^" + (logSeconds - year).ToString("0.00") + " yr";
-            if (logSeconds >= year + 6) return Math.Pow(10, logSeconds - year - 6).ToString("0.###") + " Myr";
-            if (logSeconds >= year) return Math.Pow(10, logSeconds - year).ToString("0.###") + " yr";
-            if (logSeconds >= 0) return Math.Pow(10, logSeconds).ToString("0.###") + " s";
-            if (logSeconds >= -9) return Math.Pow(10, logSeconds + 9).ToString("0.###") + " ns";
+            double[] scales = { Math.Log10(31557600.0) + 9, Math.Log10(31557600.0) + 6,
+                Math.Log10(31557600.0), Math.Log10(86400), Math.Log10(3600), Math.Log10(60),
+                0, -3, -6, -9, -12, -15, -18, -21, -24 };
+            string[] units = { "Gyr", "Myr", "yr", "d", "h", "min", "s", "ms", "μs", "ns", "ps", "fs", "as", "zs", "ys" };
+            for (int i = 0; i < scales.Length; i++)
+                if (logSeconds >= scales[i])
+                {
+                    double value = Math.Pow(10, logSeconds - scales[i]);
+                    if (double.IsInfinity(value)) return Log(logSeconds);
+                    return value.ToString("G4", CultureInfo.InvariantCulture) + " " + units[i];
+                }
             return Log(logSeconds);
+        }
+
+        static string MeasuredDuration(Isotope isotope)
+        {
+            if (!isotope.half_life_uncertainty_s.HasValue)
+                return Duration(Math.Log10(isotope.partial_half_life_s));
+            double years = isotope.partial_half_life_s / 31557600.0;
+            double uncertainty = isotope.half_life_uncertainty_s.Value /
+                isotope.ground_state_branch_fraction / 31557600.0;
+            if (years >= 1e12)
+            {
+                int exponent = (int)Math.Floor(Math.Log10(years));
+                double scale = Math.Pow(10, exponent);
+                return "(" + (years / scale).ToString("0.0##", CultureInfo.InvariantCulture) + " ± " +
+                    (uncertainty / scale).ToString("0.0##", CultureInfo.InvariantCulture) + ") × 10^" + exponent + " yr";
+            }
+            if (years >= 1e6)
+                return (years / 1e6).ToString("0.00", CultureInfo.InvariantCulture) + " ± " +
+                    (uncertainty / 1e6).ToString("0.00", CultureInfo.InvariantCulture) + " Myr";
+            return Duration(Math.Log10(isotope.partial_half_life_s)) + " ± " +
+                Duration(Math.Log10(isotope.half_life_uncertainty_s.Value / isotope.ground_state_branch_fraction));
         }
 
         public WindowMain()
@@ -224,7 +343,7 @@ namespace AlphaPlanetarium
                 {
                     time.Value = Math.Min(4, time.Value + .0125);
                     if (time.Value >= 4)
-                        Toggle();
+                        StopPlayback();
                 }
             };
             timer.Start();
@@ -354,36 +473,28 @@ namespace AlphaPlanetarium
             };
             Grid.SetRow(controls, 1);
             center.Children.Add(controls);
-            StackPanel row = new StackPanel
-            {
-                Orientation = Orientation.Horizontal
-            };
+            WrapPanel row = new WrapPanel();
             play = Button("▶  Play");
             play.Click += (s, e) => Toggle();
             row.Children.Add(play);
-            Button reset = Button("↺  Reset");
+            reset = Button("↺  Reset");
             reset.Click += (s, e) =>
             {
-                playing = false;
-                play.Content = "▶  Play";
+                StopPlayback();
                 time.Value = 0;
             };
             row.Children.Add(reset);
-            Button view = Button("Show barrier view");
+            view = Button("Show barrier view");
             view.Click += (s, e) =>
             {
                 barrierView = !barrierView;
-                scene.Children.Remove(barrierView ? populationScene : barrierRings);
-                scene.Children.Add(barrierView ? barrierRings : populationScene);
-                view.Content = barrierView ? "Show population" : "Show barrier view";
-                sceneHeading.Text = (barrierView ? "ONE NUCLEUS  /  BARRIER SCALE" : "A POPULATION IN MOTION") + "\nDrag to orbit  ·  Scroll to zoom  ·  Arrow keys rotate";
-                SetLegend();
+                ActivateScene();
             };
             row.Children.Add(view);
             clock = Text("", 14, ink);
-            clock.Margin = new Thickness(12, 11, 0, 0);
-            row.Children.Add(clock);
+            clock.Margin = new Thickness(0, 8, 0, 0);
             controls.Children.Add(row);
+            controls.Children.Add(clock);
             time = new Slider
             {
                 Minimum = 0,
@@ -417,7 +528,7 @@ namespace AlphaPlanetarium
             models.Items.Add("Ren shell");
             models.Items.Add("Qi UDL");
             models.Items.Add("WKB baseline");
-            models.SelectionChanged += (s, e) => UpdatePopulation();
+            models.SelectionChanged += (s, e) => { if (!updating && facts != null) Calculate(); };
             models.SelectedIndex = 0;
             results.Children.Add(models);
             estimates = Text("", 14, ink);
@@ -453,20 +564,35 @@ namespace AlphaPlanetarium
             Grid.SetColumn(box, 1);
             row.Children.Add(box);
             panel.Children.Add(row);
+            box.TextChanged += (sender, args) =>
+            {
+                if (!updating)
+                    InvalidateCalculation("Inputs changed. Calculate channel to update.");
+            };
             return box;
         }
 
         void LoadCatalog()
         {
-            using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("Isotopes.json"))
-            using (StreamReader reader = new StreamReader(s))
-            {
-                var data = new JavaScriptSerializer().Deserialize<List<Isotope>>(reader.ReadToEnd());
-                foreach (var item in data)
-                    isotopes.Items.Add(item);
-                int index = data.FindIndex(i => i.symbol == "Po" && i.a == 212);
-                isotopes.SelectedIndex = index < 0 ? 0 : index;
-            }
+            List<Isotope> data = EmbeddedData.Read<List<Isotope>>("Isotopes.json");
+            foreach (Isotope item in data)
+                isotopes.Items.Add(item);
+            int index = data.FindIndex(item => item.symbol == "Po" && item.a == 212);
+            isotopes.SelectedIndex = index < 0 ? 0 : index;
+        }
+
+        public bool SelectCatalog(string id)
+        {
+            foreach (Isotope item in isotopes.Items)
+                if (String.Equals(item.ToString(), id, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (Object.ReferenceEquals(isotopes.SelectedItem, item))
+                        Select();
+                    else
+                        isotopes.SelectedItem = item;
+                    return true;
+                }
+            return false;
         }
 
         void Select()
@@ -478,6 +604,7 @@ namespace AlphaPlanetarium
             z.Text = selected.z.ToString();
             a.Text = selected.a.ToString();
             q.Text = selected.q_mev.ToString("R", CultureInfo.InvariantCulture);
+            l.Text = selected.l.ToString(CultureInfo.InvariantCulture);
             binding.Text = selected.parent_binding_mev.HasValue ? selected.parent_binding_mev.Value.ToString("R", CultureInfo.InvariantCulture) : "";
             updating = false;
             Calculate();
@@ -497,6 +624,7 @@ namespace AlphaPlanetarium
         {
             if (updating)
                 return;
+            InvalidateCalculation("Calculating channel…");
             try
             {
                 Inputs x = new Inputs
@@ -508,25 +636,107 @@ namespace AlphaPlanetarium
                     r = D(r),
                     p = D(p),
                     h = D(h),
-                    binding = String.IsNullOrWhiteSpace(binding.Text) ? (double? )null : D(binding)
+                    binding = String.IsNullOrWhiteSpace(binding.Text) ? (double?)null : D(binding)
                 };
-                result = Science.Calculate(x);
-                bool match = selected != null && selected.z == x.z && selected.a == x.a && Math.Abs(selected.q_mev - x.q) < 1e-10;
-                double? measured = match ? (double? )selected.partial_half_life_s : null;
-                estimates.Text = "WKB baseline   " + Describe(result.baseline, measured) + "\nQi UDL              " + Describe(result.qi, measured) + "\nRen shell           " + Describe(result.ren, measured) + "\n\nOuter turning point  " + result.outer.ToString("0.##") + " fm\nlog₁₀ penetrability  " + result.logP.ToString("0.00") + (x.z < 78 || x.z > 108 ? "\nQi extrapolates beyond Z=78–108." : "");
-                facts.Text = match ? selected + "  ·  Q = " + selected.q_mev + " MeV\nPartial half-life   " + Duration(Math.Log10(selected.partial_half_life_s)) + " (" + F(selected.partial_half_life_s) + " s)\nTotal half-life      " + Duration(Math.Log10(selected.total_half_life_s)) + "\nGround-state branch   " + (100 * selected.ground_state_branch_fraction).ToString("0.####") + "%\n\nHalf-life source:\n" + selected.source_url + "\n\nBranch source:\n" + selected.branch_source_url + (selected.binding_extrapolated ? "\n\nBinding energy is extrapolated." : "") : "Custom channel: no measured reference associated with these inputs.";
-                if (match && selected.validation_group == "ren_holdout")
-                    facts.Text += "\n\nREN HOLDOUT\n" + selected.holdout_reason + "\nQ uncertainty: " + selected.q_uncertainty_mev + " MeV\nHalf-life uncertainty: " + F(selected.half_life_uncertainty_s.GetValueOrDefault()) + " s\n" + selected.branch_note + "\n" + selected.binding_note;
+                Result candidate = Science.Calculate(x);
+                if (!SelectedHalfLife(candidate).HasValue)
+                    throw new ArgumentException("Selected model unavailable. Qi/Ren require even-even ℓ=0; Ren also requires binding energy. Choose another playback model.");
+                result = candidate;
+                currentInputs = x;
+                bool match = selected != null && selected.z == x.z && selected.a == x.a &&
+                    selected.l == x.l && Math.Abs(selected.q_mev - x.q) < 1e-10;
+                reference = match ? selected : null;
+                double? measured = match ? (double?)selected.partial_half_life_s : null;
+                estimates.Text = "WKB baseline   " + Describe(result.baseline, measured) +
+                    "\nQi UDL              " + Describe(result.qi, measured) +
+                    "\nRen shell           " + Describe(result.ren, measured) +
+                    "\n\nOuter turning point  " + result.outer.ToString("0.##") + " fm" +
+                    "\nlog₁₀ penetrability  " + result.logP.ToString("0.00") +
+                    (measured.HasValue ? "\nΔ = log₁₀(predicted / measured partial half-life)." : "") +
+                    (x.z < 78 || x.z > 108 ? "\nQi extrapolates beyond Z=78–108." : "");
+                facts.Text = match ? ReferenceFacts(selected) :
+                    "Custom or different-ℓ channel: no measured reference associated with these inputs.";
                 UpdateBarrier(x.r, result.outer);
+                ActivateScene();
+                time.IsEnabled = play.IsEnabled = reset.IsEnabled = view.IsEnabled = true;
                 time.Value = 0;
                 UpdatePopulation();
             }
             catch (Exception ex)
             {
-                result = null;
+                InvalidateCalculation("Calculation unavailable.");
                 estimates.Text = "Check inputs: " + ex.Message;
-                status.Text = "Calculation unavailable.";
             }
+        }
+
+        string ReferenceFacts(Isotope isotope)
+        {
+            string text = isotope + "  ·  Q = " + isotope.q_mev + " MeV  ·  ℓ=" + isotope.l +
+                "\nPartial half-life   " + MeasuredDuration(isotope) +
+                "\nTotal half-life      " + Duration(Math.Log10(isotope.total_half_life_s)) +
+                "\nGround-state branch   " + (100 * isotope.ground_state_branch_fraction).ToString("0.####") + "%" +
+                "\n\nHalf-life source:\n" + isotope.source_url +
+                "\n\nBranch source:\n" + isotope.branch_source_url;
+            if (isotope.binding_extrapolated)
+                text += "\n\nBinding energy is extrapolated.";
+            if (isotope.validation_group == "ren_holdout")
+                text += "\n\nREN HOLDOUT\n" + isotope.holdout_reason +
+                    "\nQ uncertainty: " + isotope.q_uncertainty_mev + " MeV\n" +
+                    isotope.branch_note + "\n" + isotope.binding_note +
+                    "\nBinding source:\n" + isotope.binding_source_url;
+            return text;
+        }
+
+        void StopPlayback()
+        {
+            playing = false;
+            if (play != null)
+                play.Content = "▶  Play";
+        }
+
+        void InvalidateCalculation(string message)
+        {
+            StopPlayback();
+            result = null;
+            currentInputs = null;
+            reference = null;
+            if (time != null)
+            {
+                time.IsEnabled = false;
+                time.Value = 0;
+            }
+            if (play != null) play.IsEnabled = false;
+            if (reset != null) reset.IsEnabled = false;
+            if (view != null) view.IsEnabled = false;
+            if (clock != null) clock.Text = "No current population result";
+            if (status != null) status.Text = message;
+            if (estimates != null) estimates.Text = "Calculate a valid channel to view predictions.";
+            if (facts != null) facts.Text = "No current measured-channel comparison.";
+            if (barrierRings != null) barrierRings.Children.Clear();
+            if (scene != null)
+            {
+                scene.Children.Remove(populationScene);
+                scene.Children.Remove(barrierRings);
+            }
+            if (sceneHeading != null) sceneHeading.Text = "NO CURRENT CALCULATION";
+            if (legend != null) legend.Inlines.Clear();
+        }
+
+        void ActivateScene()
+        {
+            scene.Children.Remove(populationScene);
+            scene.Children.Remove(barrierRings);
+            scene.Children.Add(barrierView ? barrierRings : populationScene);
+            view.Content = barrierView ? "Show population" : "Show barrier view";
+            sceneHeading.Text = (barrierView ? "ONE NUCLEUS  /  BARRIER SCALE" : "A POPULATION IN MOTION") +
+                "\nDrag to orbit  ·  Scroll to zoom  ·  Arrow keys rotate";
+            SetLegend();
+        }
+
+        double? SelectedHalfLife(Result prediction)
+        {
+            return models.SelectedIndex == 0 ? prediction.ren :
+                models.SelectedIndex == 1 ? prediction.qi : (double?)prediction.baseline;
         }
 
         string Describe(double? v, double? measured)
@@ -538,20 +748,80 @@ namespace AlphaPlanetarium
 
         void Toggle()
         {
+            if (result == null || !time.IsEnabled)
+                return;
+            if (!playing && time.Value >= time.Maximum)
+                time.Value = 0;
             playing = !playing;
             play.Content = playing ? "❚❚  Pause" : "▶  Play";
+        }
+
+        public void VerifyInteractionState()
+        {
+            Require(SelectCatalog("Po-212"), "Po-212 selection");
+            models.SelectedIndex = 2;
+            l.Text = "1";
+            Calculate();
+            Require(result != null && !facts.Text.Contains("Partial half-life") &&
+                !estimates.Text.Contains("Δ"), "different angular momentum has no ground-state residual");
+
+            Require(SelectCatalog("Dy-154") && l.Text == "0", "catalog selection restores angular momentum");
+            Require(facts.Text.Contains("1.40 ± 0.08 Myr") && facts.Text.Contains("REN HOLDOUT"), "Dy uncertainty display");
+            Require(SelectCatalog("Os-186"), "Os holdout selection");
+            Require(facts.Text.Contains("(2.0 ± 1.1) × 10^15 yr"), "Os uncertainty display");
+            models.SelectedIndex = 0;
+            Require(result != null && result.ren.HasValue, "holdout Ren calculation");
+
+            time.Value = 2;
+            q.Text = "invalid";
+            Require(result == null && !time.IsEnabled && !play.IsEnabled && !view.IsEnabled &&
+                !scene.Children.Contains(populationScene) && barrierRings.Children.Count == 0,
+                "editing invalidates current scene and controls");
+            Calculate();
+            Require(result == null && !facts.Text.Contains("REN HOLDOUT") &&
+                clock.Text == "No current population result", "invalid calculation clears reference and clock");
+
+            SelectCatalog("Po-212");
+            binding.Text = "";
+            Calculate();
+            Require(result == null && !time.IsEnabled && !play.IsEnabled &&
+                !scene.Children.Contains(populationScene), "unavailable Ren model clears playback and scene");
+            models.SelectedIndex = 2;
+            Require(result != null && time.IsEnabled, "switching to an available model restores current output");
+            q.Text = "50";
+            Calculate();
+            Require(result != null && result.logP == 0 && play.IsEnabled, "no-barrier channel retains population");
+            Require(!facts.Text.Contains("Partial half-life"), "custom Q has no catalog measurement");
+
+            time.Value = time.Maximum;
+            Toggle();
+            Require(playing && time.Value == 0, "play restarts at the end");
+            time.Value = time.Maximum;
+            Require(!playing, "manual navigation to the end stops playback");
+            time.Value = 1;
+            Require(clock.Text.EndsWith("half-life") && status.Text.Contains("expected 90.0"), "one-half-life expectation and units");
+        }
+
+        static void Require(bool condition, string message)
+        {
+            if (!condition)
+                throw new InvalidOperationException(message);
+        }
+
+        public void CloseTestWindow()
+        {
+            timer.Stop();
+            Close();
         }
 
         void UpdatePopulation()
         {
             if (time == null || result == null || models == null)
                 return;
-            double? log = models.SelectedIndex == 0 ? result.ren : models.SelectedIndex == 1 ? result.qi : (double? )result.baseline;
+            double? log = SelectedHalfLife(result);
             if (!log.HasValue)
             {
-                status.Text = "Selected model unavailable for these inputs; choose another model.";
-                playing = false;
-                play.Content = "▶  Play";
+                InvalidateCalculation("Selected model unavailable for these inputs; choose another model.");
                 return;
             }
 
@@ -565,8 +835,12 @@ namespace AlphaPlanetarium
                 particles[i].Material = alive ? parentMaterial : daughterMaterial;
             }
 
-            clock.Text = elapsed.ToString("0.00") + " half-lives";
-            status.Text = survivors + " / " + particles.Count + " sampled survivors  ·  expected " + (particles.Count * Math.Pow(2, -elapsed)).ToString("0.0") + "  ·  elapsed " + (elapsed > 0 ? Duration(log.Value + Math.Log10(elapsed)) : "0 s") + "  ·  seed 42";
+            clock.Text = elapsed.ToString("0.00") + (elapsed == 1 ? " half-life" : " half-lives");
+            status.Text = survivors + " / " + particles.Count + " sampled survivors  ·  expected " +
+                (particles.Count * Math.Pow(2, -elapsed)).ToString("0.0") + "  ·  elapsed " +
+                (elapsed > 0 ? Duration(log.Value + Math.Log10(elapsed)) : "0 s") + "  ·  seed 42";
+            if (time.Value >= time.Maximum)
+                StopPlayback();
         }
 
         void SetLegend()
@@ -578,7 +852,13 @@ namespace AlphaPlanetarium
             var second = new System.Windows.Documents.Run(barrierView ? "     ● Outer turning point" : "     ● Decayed daughter");
             second.Foreground = Brush(barrierView ? "#7DAFF5" : "#E69A75");
             legend.Inlines.Add(second);
-            legend.Inlines.Add(new System.Windows.Documents.Run(barrierView ? "\nOne nucleus; radii use the same physical scale." : "\nEach sphere represents one nucleus; size is illustrative."));
+            legend.Inlines.Add(new System.Windows.Documents.Run(barrierView
+                ? "\nOne nucleus; radii use the same physical scale."
+                : "\nEach sphere is one nucleus; size is illustrative.\n" +
+                    (reference != null && reference.l == 0 ? "Single ground-state channel" : "Single specified channel") +
+                    "; competing branches excluded."));
+            if (barrierView && currentInputs != null && result.outer <= currentInputs.r)
+                legend.Inlines.Add(new System.Windows.Documents.Run("\nNo exterior forbidden interval (P = 1)."));
         }
 
         Material parentMaterial = new DiffuseMaterial(Brush("#73E0CF")), daughterMaterial = new DiffuseMaterial(Brush("#E69A75"));
@@ -752,11 +1032,42 @@ namespace AlphaPlanetarium
         static int Main(string[] args)
         {
             if (args.Length > 0 && args[0] == "--self-test")
-                return Science.SelfTest();
+            {
+                if (Science.SelfTest() != 0)
+                    return 1;
+                Application testApplication = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                WindowMain testWindow = null;
+                try
+                {
+                    testWindow = new WindowMain();
+                    testWindow.VerifyInteractionState();
+                    return 0;
+                }
+                catch (Exception error)
+                {
+                    System.Diagnostics.Debug.WriteLine(error.ToString());
+                    return 1;
+                }
+                finally
+                {
+                    if (testWindow != null) testWindow.CloseTestWindow();
+                    testApplication.Shutdown();
+                }
+            }
             Application app = new Application();
             WindowMain window = new WindowMain();
-            if (args.Length == 2 && args[0] == "--render-preview")
+            if ((args.Length == 2 || args.Length == 3 || args.Length == 5) && args[0] == "--render-preview")
             {
+                if (args.Length >= 3 && !window.SelectCatalog(args[2]))
+                    return 2;
+                if (args.Length == 5)
+                {
+                    int width, height;
+                    if (!int.TryParse(args[3], out width) || !int.TryParse(args[4], out height) || width < 1050 || height < 700)
+                        return 2;
+                    window.Width = width;
+                    window.Height = height;
+                }
                 window.Loaded += (sender, eventArgs) => window.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
                 {
                     try
