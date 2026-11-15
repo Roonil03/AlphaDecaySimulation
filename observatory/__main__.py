@@ -1,5 +1,6 @@
 """Simulate a selected alpha emitter or compare the published benchmark catalog."""
 import argparse
+from decimal import Decimal
 import json
 import math
 from pathlib import Path
@@ -63,15 +64,19 @@ def run(base, population=10000, seed=42, isotope=None, custom=None, model='resea
     ready(base)
     item = isotope or (None if custom else next(x for x in catalog() if x['symbol'] == 'Po' and x['a'] == 212))
     inputs = {**BASE, **({'parent_z': item['z'], 'parent_a': item['a'], 'q_mev': item['q_mev']} if item else custom or {})}
+    binding = inputs.pop('parent_binding_mev', None)
     # Omit the new flag for explicit baseline, preserving compatibility with older services.
     if model == 'research':
         inputs['research_model'] = True
         if item and 'parent_binding_mev' in item:
             inputs['parent_binding_mev'] = item['parent_binding_mev']
+        elif binding is not None:
+            inputs['parent_binding_mev'] = binding
     measured = item['partial_half_life_s'] if item else None
     points = []
     for offset in (-0.1, 0.0, 0.1):
-        q = inputs['q_mev'] + offset
+        # Decimal addition keeps the accepted 0.11 MeV endpoint at exactly 0.01.
+        q = float(Decimal(str(inputs['q_mev'])) + Decimal(str(offset)))
         result = request_when_ready(base, '/v1/barrier', {**inputs, 'q_mev': q})
         if measured is not None:
             result['log10_ratio_to_measured'] = result['log10_half_life_s'] - math.log10(measured)
@@ -140,8 +145,8 @@ def main():
         parser.error('provide all of --z, --a, --q together, without --isotope')
     custom = dict(parent_z=args.z, parent_a=args.a, q_mev=args.q) if args.z is not None else None
     if args.binding is not None:
-        if not custom or not math.isfinite(args.binding) or args.binding <= 0:
-            parser.error('--binding requires custom Z/A/Q and a positive finite energy')
+        if not custom or not math.isfinite(args.binding) or not 0 < args.binding <= 10000:
+            parser.error('--binding requires custom Z/A/Q and a finite energy in (0, 10000] MeV')
         custom['parent_binding_mev'] = args.binding
     if custom and (not 3 <= args.z <= 130 or not 5 <= args.a <= 400 or args.a - args.z < 2 or not math.isfinite(args.q) or not .11 <= args.q <= 99.9):
         parser.error('custom Z, A or Q outside supported domain (Q must permit the ±0.1 MeV sweep)')

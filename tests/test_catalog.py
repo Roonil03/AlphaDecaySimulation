@@ -1,7 +1,9 @@
+import contextlib
+import io
 import math
 import unittest
 from unittest.mock import patch
-from observatory.__main__ import catalog, run, validate
+from observatory.__main__ import catalog, main, run, validate
 
 
 class CatalogTest(unittest.TestCase):
@@ -36,6 +38,39 @@ class CatalogTest(unittest.TestCase):
         first = result['nuclides'][0]
         self.assertAlmostEqual(first['shell_error'], 3 - math.log10(catalog()[0]['partial_half_life_s']))
         self.assertTrue(first['qi_extrapolation'])
+
+    def test_cli_sweep_endpoints_and_baseline_wire_compatibility(self):
+        for q, model in (('0.11', 'baseline'), ('99.9', 'research')):
+            calls = []
+            def fake(base, path, payload):
+                if path.endswith('barrier'):
+                    calls.append(payload)
+                    self.assertGreaterEqual(payload['q_mev'], .01)
+                    self.assertLessEqual(payload['q_mev'], 100)
+                    return {'log10_half_life_s': 0}
+                return {'expected_survivors': [], 'sampled_survivors': []}
+            args = ['observatory', '--z', '84', '--a', '212', '--q', q,
+                    '--binding', '10000', '--model', model]
+            with self.subTest(q=q, model=model), patch('sys.argv', args), contextlib.redirect_stdout(io.StringIO()):
+                with patch('observatory.__main__.ready'), patch('observatory.__main__.request_when_ready', side_effect=fake):
+                    main()
+            self.assertEqual(len(calls), 3)
+            self.assertEqual(calls[0]['q_mev'] if q == '0.11' else calls[-1]['q_mev'], .01 if q == '0.11' else 100)
+            for payload in calls:
+                if model == 'baseline':
+                    self.assertNotIn('research_model', payload)
+                    self.assertNotIn('parent_binding_mev', payload)
+                else:
+                    self.assertEqual(payload['parent_binding_mev'], 10000)
+
+    def test_cli_rejects_binding_outside_kernel_domain(self):
+        for binding in ('0', '-1', '10001', 'nan', 'inf'):
+            args = ['observatory', '--z', '84', '--a', '212', '--q', '8', '--binding', binding]
+            with self.subTest(binding=binding), patch('sys.argv', args), contextlib.redirect_stderr(io.StringIO()):
+                with patch('observatory.__main__.run') as mocked, self.assertRaises(SystemExit) as error:
+                    main()
+            self.assertEqual(error.exception.code, 2)
+            mocked.assert_not_called()
 
 
 if __name__ == '__main__':
