@@ -5,12 +5,14 @@
     "partial_half_life_s": 44180640000000.0,
     "source_url": "https://www.nature.com/articles/s41598-022-12684-6",
     "branch_source_url": "https://www.nndc.bnl.gov/ensnds/150/Gd/a_decay.pdf",
-    "parent_binding_mev": 1261.74205306, "binding_extrapolated": false,
+    "parent_binding_mev": 1261.742097, "binding_extrapolated": false,
+    "binding_uncertainty_mev": 0.0074382,
+    "binding_source_url": "https://www-nds.iaea.org/amdc/ame2020/mass_1.mas20.txt",
     "validation_group": "ren_holdout",
     "holdout_reason": "NUBASE2020 half-life 3.0 ± 1.5 My fails Ren's strict below-50% uncertainty criterion; not one of the 11 later additions.",
     "half_life_uncertainty_s": 2524608000000.0, "q_uncertainty_mev": 0.00495,
     "branch_note": "Only ground-state alpha line observed; 100% approximation.",
-    "binding_note": "Derived from NUBASE2020 atomic mass excess -70.394(7) MeV and hydrogen/neutron mass excesses."
+    "binding_note": "AME2020 unflagged binding energy per nucleon 8193.1305 ± 0.0483 keV, multiplied by A/1000."
   },
   {
     "symbol": "Os", "z": 76, "a": 186, "q_mev": 2.8212,
@@ -18,12 +20,14 @@
     "partial_half_life_s": 6.31152e22,
     "source_url": "https://www-nds.iaea.org/amdc/ame2020/NUBASE2020.pdf",
     "branch_source_url": "https://arxiv.org/abs/2009.01508",
-    "parent_binding_mev": 1484.80675736, "binding_extrapolated": false,
+    "parent_binding_mev": 1484.8068264, "binding_extrapolated": false,
+    "binding_uncertainty_mev": 0.0007626,
+    "binding_source_url": "https://www-nds.iaea.org/amdc/ame2020/mass_1.mas20.txt",
     "validation_group": "ren_holdout",
     "holdout_reason": "NUBASE2020 half-life 2.0 ± 1.1 Py fails Ren's below-50% uncertainty criterion; not one of the 11 later additions.",
     "half_life_uncertainty_s": 3.471336e22, "q_uncertainty_mev": 0.00087,
     "branch_note": "Ground-state fraction approximated as 100%; first excited-state partial half-life exceeds 3.3e17 y at 90% CL.",
-    "binding_note": "Derived from NUBASE2020 atomic mass excess -43.0000(8) MeV and hydrogen/neutron mass excesses."
+    "binding_note": "AME2020 unflagged binding energy per nucleon 7982.8324 ± 0.0041 keV, multiplied by A/1000."
   },
   {
     "symbol": "Sm",

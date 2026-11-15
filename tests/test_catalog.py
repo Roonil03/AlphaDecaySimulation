@@ -50,6 +50,17 @@ class CatalogTest(unittest.TestCase):
         self.assertAlmostEqual(result['nuclides'][0]['shell_error'], 3 - math.log10(44180640000000.0))
         self.assertIn('Qi fit independence is not established', result['limitations'])
 
+    def test_holdout_source_values_and_uncertainties(self):
+        rows = [x for x in catalog() if x.get('validation_group') == 'ren_holdout']
+        self.assertEqual(len(rows), 2)
+        for row, per_nucleon, uncertainty in zip(rows, (8193.1305, 7982.8324), (.0483, .0041)):
+            self.assertAlmostEqual(row['parent_binding_mev'], per_nucleon * row['a'] / 1000)
+            self.assertAlmostEqual(row['binding_uncertainty_mev'], uncertainty * row['a'] / 1000)
+            self.assertFalse(row['binding_extrapolated'])
+            self.assertIn('ame2020', row['binding_source_url'])
+            self.assertGreater(row['half_life_uncertainty_s'], 0)
+            self.assertGreater(row['q_uncertainty_mev'], 0)
+
     def test_cli_sweep_endpoints_and_baseline_wire_compatibility(self):
         for q, model in (('0.11', 'baseline'), ('99.9', 'research')):
             calls = []
