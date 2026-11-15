@@ -1,0 +1,18 @@
+[package]
+name = "barrier-kernel"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[dependencies]
+axum = { version = "0.7", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
+
+[build-dependencies]
+cc = "1"
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }
+serde_json = "1"
