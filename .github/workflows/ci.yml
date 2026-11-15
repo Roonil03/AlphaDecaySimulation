@@ -21,6 +21,18 @@ jobs:
           name: AlphaDecay-windows
           path: dist/AlphaDecay.exe
           if-no-files-found: error
+      - uses: actions/download-artifact@v4
+        with:
+          name: AlphaDecay-windows
+          path: ${{ runner.temp }}/alpha-decay-extracted
+      - name: Verify extracted standalone artifact
+        shell: powershell
+        run: |
+          $isolated = Join-Path $env:RUNNER_TEMP 'alpha-decay-extracted'
+          $files = @(Get-ChildItem -LiteralPath $isolated -File -Recurse)
+          if ($files.Count -ne 1 -or $files[0].Name -ne 'AlphaDecay.exe') { throw 'Expected a single executable artifact' }
+          $p = Start-Process -FilePath $files[0].FullName -WorkingDirectory $isolated -ArgumentList '--self-test' -Wait -PassThru -WindowStyle Hidden
+          if ($p.ExitCode -ne 0) { throw "Extracted artifact self-test failed ($($p.ExitCode))" }
   integration:
     runs-on: ubuntu-latest
     steps:
@@ -31,7 +43,7 @@ jobs:
       - name: Portable client tests
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Build, test, and start services
-        # Image builds run viewer client regressions, Go, Elixir, and locked Rust release tests.
+        # Image builds run Go, Elixir, and locked Rust release tests.
         run: docker compose up --build -d
       - name: Exercise real services
         run: python -m unittest discover -s tests -p 'integration.py' -v
@@ -46,5 +58,3 @@ jobs:
       - name: Stop services
         if: always()
         run: docker compose down --volumes
-
-

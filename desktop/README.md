@@ -8,13 +8,13 @@ From the repository root, build on Windows with .NET Framework 4.x and its WPF r
 powershell -ExecutionPolicy Bypass -File desktop/build.ps1
 ```
 
-The output is `desktop/AlphaDecayPlanetarium.exe`. Use `-OutputPath C:\path\AlphaDecay.exe` to choose another destination. Launch the EXE normally. The runtime requires Windows and .NET Framework 4.x with WPF.
+The output is `dist\AlphaDecay.exe`. Use `-OutputPath C:\path\AlphaDecay.exe` to choose another destination. Launch the EXE normally. The runtime requires Windows and .NET Framework 4.x with WPF. See [the installation guide](../install.md) for the single-EXE Actions artifact and verification instructions.
 
-The app supports `AlphaDecayPlanetarium.exe --self-test` (exit code 0 on success, nonzero on failure). It loads the embedded catalog, legacy report and holdout report, compares all 15 channels with the offline physics, checks the kernel's published Qi and Ren fixtures and analytic Coulomb integrals, and exercises the actual WPF reference, input invalidation and playback state transitions. Both Dy-154 and Os-186 holdouts and their uncertainty metadata are required. No adjacent data files are read at runtime.
+The app supports `dist\AlphaDecay.exe --self-test` (exit code 0 on success, nonzero on failure). It loads the embedded catalog, legacy report and holdout report, compares all 15 channels with the offline physics, checks the kernel's published Qi and Ren fixtures and analytic Coulomb integrals, and exercises the actual WPF reference, input invalidation and playback state transitions. Both Dy-154 and Os-186 holdouts and their uncertainty metadata are required. No adjacent data files are read at runtime.
 
 The interaction self-test runs with invariant formatting and with the comma-decimal `de-DE` culture. Numerical assertions follow the active display culture.
 
-`AlphaDecayPlanetarium.exe --render-preview path.png [catalog-id [width height]]` renders the actual WPF window and exits. For reproducible holdout and minimum-size checks use `--render-preview dy.png Dy-154` and `--render-preview os-small.png Os-186 1050 700`. Omit the ID to preview Po-212. Exit code 0 means success, 1 is a render failure, and 2 is an invalid ID or size.
+`dist\AlphaDecay.exe --render-preview path.png [catalog-id [width height]]` renders the actual WPF window and exits. For reproducible holdout and minimum-size checks use `--render-preview dy.png Dy-154` and `--render-preview os-small.png Os-186 1050 700`. Omit the ID to preview Po-212. Exit code 0 means success, 1 is a render failure, and 2 is an invalid ID or size.
 
 Select a reference or edit the inputs and calculate. Drag the scene to orbit, scroll to zoom, or focus the scene and use arrow keys. Playback and the slider use selected-model half-lives; 180 independently sampled lifetimes use seed 42 and remain fixed when rewinding. Dots are illustrative population members, not particles within a single nucleus. The separate barrier view shows one nucleus and the specified boundary and outer turning point on a common scale; their radii have the physical ratio R/b. The simulated population positions and sphere sizes are illustrative.
 
