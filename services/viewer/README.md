@@ -1,0 +1,7 @@
+# Spatial viewer
+
+After `docker compose up --build -d`, open http://127.0.0.1:8090. Select an isotope and a half-life model; drag the view or use the view buttons. The service reads the shared `observatory/isotopes.json` at build time and proxies model and ensemble requests to the gateway on the Compose network. Rebuild the viewer after changing the catalog.
+
+The green sphere is the assumed 9 fm WKB nuclear radius; the outer wire sphere is the WKB outer turning radius returned by the kernel. Their ratio is to scale. Each sphere is projected and hidden-line rendered separately using `ln` so the inner sphere remains visible as a cutaway-style illustration. The shells are radial boundaries, not a particle trajectory, potential-height plot, or visualization of tunneling. Research-model half-lives, when returned by the kernel, do not determine this WKB geometry. The survival bars use the selected model, a population of 1,000, seed 42, and times relative to its half-life. They are an illustrative constant-rate population simulation, not observed decays. The research option reports unavailable for unsupported inputs or kernels.
+
+For development, run `go test ./...` inside `services/viewer`. To run the viewer outside Compose, start the gateway and set `GATEWAY_URL` and `CATALOG_PATH` if their defaults (`http://localhost:8080` and `observatory/isotopes.json`, relative to the working directory) do not apply. Run `go run ./services/viewer` from the repository root only via its module directory or build a binary from that directory and start it at the root.
