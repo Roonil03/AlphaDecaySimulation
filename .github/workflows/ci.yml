@@ -1,0 +1,28 @@
+name: Tests
+on:
+  push:
+  pull_request:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Portable client tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Build, test, and start services
+        # Image builds run Go, Elixir, and locked Rust release numerical tests.
+        run: docker compose up --build -d
+      - name: Exercise real services
+        run: python -m unittest discover -s tests -p 'integration.py' -v
+      - name: Reproducible benchmark
+        run: python -m observatory
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Stop services
+        if: always()
+        run: docker compose down --volumes

@@ -1,0 +1,19 @@
+services:
+  kernel:
+    build: ./services/kernel
+    ports:
+      - "127.0.0.1:8081:8081"
+  ensemble:
+    build: ./services/ensemble
+    ports:
+      - "127.0.0.1:8082:8082"
+  gateway:
+    build: ./services/gateway
+    environment:
+      KERNEL_URL: http://kernel:8081
+      ENSEMBLE_URL: http://ensemble:8082
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - kernel
+      - ensemble
