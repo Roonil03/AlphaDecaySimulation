@@ -99,10 +99,12 @@ def run(base, population=10000, seed=42, isotope=None, custom=None, model='resea
             'energy_sweep': points, 'times_s': times, 'survival': survival}
 
 
-def validate(base):
+def validate(base, group='legacy'):
     ready(base)
     rows = []
     for item in catalog():
+        if item.get('validation_group', 'legacy') != group:
+            continue
         params = {**BASE, 'parent_z': item['z'], 'parent_a': item['a'], 'q_mev': item['q_mev'], 'research_model': True, 'parent_binding_mev': item['parent_binding_mev']}
         result = request_when_ready(base, '/v1/barrier', params)
         ref = math.log10(item['partial_half_life_s'])
@@ -119,6 +121,10 @@ def validate(base):
         metrics[model] = {'count': len(errors), 'mae_log10': sum(map(abs, errors))/len(errors) if errors else None,
                           'rmse_log10': math.sqrt(sum(x*x for x in errors)/len(errors)) if errors else None}
     return {'description': 'Ground-state partial half-life comparison; errors are log10(prediction/reference).',
+            'validation_group': group,
+            'limitations': ('Excluded from Ren half-life fit by its published uncertainty selection; '
+                            'measured masses are inputs, uncertainty is not propagated, and this is a small selected sample. '
+                            'Qi fit independence is not established.') if group == 'ren_holdout' else None,
             'inputs': {'l': 0, 'radius_fm': 9.0, 'preformation': .1, 'assault_hz': 1e21},
             'metrics': metrics, 'nuclides': rows}
 
@@ -134,7 +140,8 @@ def main():
     parser.add_argument('--q', type=float, help='custom decay energy in MeV')
     parser.add_argument('--binding', type=float, help='custom parent total nuclear binding energy in MeV')
     parser.add_argument('--model', choices=('research', 'baseline'), default='research')
-    parser.add_argument('--validate', action='store_true', help='compare every catalog isotope with both models')
+    parser.add_argument('--validate', action='store_true', help='compare the legacy benchmark catalog')
+    parser.add_argument('--validate-holdout', action='store_true', help='report channels excluded from Ren half-life fit separately')
     args = parser.parse_args()
     if not 1 <= args.population <= 100000:
         parser.error('population must be between 1 and 100000')
@@ -156,7 +163,9 @@ def main():
         if item is None:
             parser.error('unknown isotope; see observatory/isotopes.json')
     try:
-        result = validate(args.url) if args.validate else run(args.url, args.population, args.seed, item, custom, args.model)
+        if args.validate and args.validate_holdout:
+            parser.error('choose only one validation group')
+        result = validate(args.url, 'ren_holdout' if args.validate_holdout else 'legacy') if args.validate or args.validate_holdout else run(args.url, args.population, args.seed, item, custom, args.model)
         print(json.dumps(result, indent=2, allow_nan=False))
     except (ValueError, OverflowError) as error:
         parser.error(str(error))
