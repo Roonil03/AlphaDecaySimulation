@@ -18,4 +18,13 @@ defmodule Ensemble.SimulationTest do
     assert {:error, _} = Ensemble.Simulation.run(%{"log10_half_life_s" => 0, "times_s" => [-1], "population" => 1, "seed" => 1})
     assert {:error, _} = Ensemble.Simulation.run(%{"log10_half_life_s" => 0, "times_s" => [], "population" => 0, "seed" => 1})
   end
+
+  test "JSON floating-point zero preserves the initial population" do
+    for half <- [0, 1.0e6, -1.0e6] do
+      input = Jason.decode!(~s({"log10_half_life_s": #{half}, "times_s": [0.0, 0, 1], "population": 12, "seed": 42}))
+      assert {:ok, result} = Ensemble.Simulation.run(input)
+      assert [12, 12, _] = result.sampled_survivors
+      assert [12.0, 12.0, _] = result.expected_survivors
+    end
+  end
 end

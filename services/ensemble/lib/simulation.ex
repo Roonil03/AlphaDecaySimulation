@@ -17,7 +17,7 @@ defmodule Ensemble.Simulation do
   end
   def run(_), do: {:error, "invalid population, seed, or required fields"}
 
-  defp survival(0, _half), do: 1.0
+  defp survival(t, _half) when t == 0, do: 1.0
   defp survival(t, half) do
     # log(lambda*t) avoids overflow/underflow for extreme half-lives.
     log_x = :math.log(@ln2) + :math.log(t) - half * @ln10
