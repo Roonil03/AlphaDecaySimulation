@@ -164,6 +164,9 @@ namespace AlphaPlanetarium
         PerspectiveCamera camera;
         Model3DGroup scene;
         Model3DGroup barrierRings;
+        Model3DGroup populationScene;
+        TextBlock legend, sceneHeading;
+        bool barrierView;
         List<GeometryModel3D> particles = new List<GeometryModel3D>();
         List<double> lifetimes = new List<double>();
         DispatcherTimer timer;
@@ -186,6 +189,17 @@ namespace AlphaPlanetarium
         static string Log(double v)
         {
             return "10^" + v.ToString("0.00", CultureInfo.InvariantCulture) + " s";
+        }
+
+        static string Duration(double logSeconds)
+        {
+            double year = Math.Log10(31557600.0);
+            if (logSeconds >= year + 9) return "10^" + (logSeconds - year).ToString("0.00") + " yr";
+            if (logSeconds >= year + 6) return Math.Pow(10, logSeconds - year - 6).ToString("0.###") + " Myr";
+            if (logSeconds >= year) return Math.Pow(10, logSeconds - year).ToString("0.###") + " yr";
+            if (logSeconds >= 0) return Math.Pow(10, logSeconds).ToString("0.###") + " s";
+            if (logSeconds >= -9) return Math.Pow(10, logSeconds + 9).ToString("0.###") + " ns";
+            return Log(logSeconds);
         }
 
         public WindowMain()
@@ -284,7 +298,7 @@ namespace AlphaPlanetarium
             };
             body.Children.Add(ls);
             StackPanel source = new StackPanel();
-            source.Children.Add(Text("01  SELECT A NUCLEUS", 12, accent));
+            source.Children.Add(Text("SELECT A NUCLEUS", 12, accent));
             source.Children.Add(Text("Reference isotope", 15, ink));
             isotopes = new ComboBox
             {
@@ -296,7 +310,7 @@ namespace AlphaPlanetarium
             source.Children.Add(Text("Or edit parameters below for a custom channel.", 12, muted));
             left.Children.Add(Card(source));
             StackPanel fields = new StackPanel();
-            fields.Children.Add(Text("02  MODEL INPUTS", 12, accent));
+            fields.Children.Add(Text("MODEL INPUTS", 12, accent));
             z = Field(fields, "Parent Z", "84");
             a = Field(fields, "Parent A", "212");
             q = Field(fields, "Q value (MeV)", "8.9542");
@@ -321,12 +335,13 @@ namespace AlphaPlanetarium
             };
             viewport = new Viewport3D();
             visual.Children.Add(viewport);
-            TextBlock overlay = Text("A POPULATION IN MOTION\nDrag to orbit  ·  Scroll to zoom  ·  Arrow keys rotate", 12, muted);
+            TextBlock overlay = sceneHeading = Text("A POPULATION IN MOTION\nDrag to orbit  ·  Scroll to zoom  ·  Arrow keys rotate", 12, muted);
             overlay.Margin = new Thickness(20);
             overlay.VerticalAlignment = VerticalAlignment.Top;
             overlay.IsHitTestVisible = false;
             visual.Children.Add(overlay);
-            TextBlock key = Text("●  Surviving parent     ●  Decayed daughter\nEach sphere represents one nucleus; size is illustrative.\nGold ring: boundary radius  ·  Blue ring: outer turning point (same scale)", 12, ink);
+            TextBlock key = legend = Text("", 12, ink);
+            SetLegend();
             key.Margin = new Thickness(20);
             key.VerticalAlignment = VerticalAlignment.Bottom;
             key.IsHitTestVisible = false;
@@ -354,6 +369,17 @@ namespace AlphaPlanetarium
                 time.Value = 0;
             };
             row.Children.Add(reset);
+            Button view = Button("Show barrier view");
+            view.Click += (s, e) =>
+            {
+                barrierView = !barrierView;
+                scene.Children.Remove(barrierView ? populationScene : barrierRings);
+                scene.Children.Add(barrierView ? barrierRings : populationScene);
+                view.Content = barrierView ? "Show population" : "Show barrier view";
+                sceneHeading.Text = (barrierView ? "ONE NUCLEUS  /  BARRIER SCALE" : "A POPULATION IN MOTION") + "\nDrag to orbit  ·  Scroll to zoom  ·  Arrow keys rotate";
+                SetLegend();
+            };
+            row.Children.Add(view);
             clock = Text("", 14, ink);
             clock.Margin = new Thickness(12, 11, 0, 0);
             row.Children.Add(clock);
@@ -381,7 +407,7 @@ namespace AlphaPlanetarium
             Grid.SetColumn(rs, 2);
             body.Children.Add(rs);
             StackPanel results = new StackPanel();
-            results.Children.Add(Text("03  COMPARE MODELS", 12, accent));
+            results.Children.Add(Text("COMPARE MODELS", 12, accent));
             results.Children.Add(Text("Playback model", 15, ink));
             models = new ComboBox
             {
@@ -488,7 +514,7 @@ namespace AlphaPlanetarium
                 bool match = selected != null && selected.z == x.z && selected.a == x.a && Math.Abs(selected.q_mev - x.q) < 1e-10;
                 double? measured = match ? (double? )selected.partial_half_life_s : null;
                 estimates.Text = "WKB baseline   " + Describe(result.baseline, measured) + "\nQi UDL              " + Describe(result.qi, measured) + "\nRen shell           " + Describe(result.ren, measured) + "\n\nOuter turning point  " + result.outer.ToString("0.##") + " fm\nlog₁₀ penetrability  " + result.logP.ToString("0.00") + (x.z < 78 || x.z > 108 ? "\nQi extrapolates beyond Z=78–108." : "");
-                facts.Text = match ? selected + "  ·  Q = " + selected.q_mev + " MeV\nPartial half-life   " + F(selected.partial_half_life_s) + " s\nTotal half-life      " + F(selected.total_half_life_s) + " s\nGround-state branch   " + (100 * selected.ground_state_branch_fraction).ToString("0.####") + "%\n\nHalf-life source:\n" + selected.source_url + "\n\nBranch source:\n" + selected.branch_source_url + (selected.binding_extrapolated ? "\n\nBinding energy is extrapolated." : "") : "Custom channel: no measured reference associated with these inputs.";
+                facts.Text = match ? selected + "  ·  Q = " + selected.q_mev + " MeV\nPartial half-life   " + Duration(Math.Log10(selected.partial_half_life_s)) + " (" + F(selected.partial_half_life_s) + " s)\nTotal half-life      " + Duration(Math.Log10(selected.total_half_life_s)) + "\nGround-state branch   " + (100 * selected.ground_state_branch_fraction).ToString("0.####") + "%\n\nHalf-life source:\n" + selected.source_url + "\n\nBranch source:\n" + selected.branch_source_url + (selected.binding_extrapolated ? "\n\nBinding energy is extrapolated." : "") : "Custom channel: no measured reference associated with these inputs.";
                 if (match && selected.validation_group == "ren_holdout")
                     facts.Text += "\n\nREN HOLDOUT\n" + selected.holdout_reason + "\nQ uncertainty: " + selected.q_uncertainty_mev + " MeV\nHalf-life uncertainty: " + F(selected.half_life_uncertainty_s.GetValueOrDefault()) + " s\n" + selected.branch_note + "\n" + selected.binding_note;
                 UpdateBarrier(x.r, result.outer);
@@ -507,7 +533,7 @@ namespace AlphaPlanetarium
         {
             if (!v.HasValue)
                 return "unavailable";
-            return Log(v.Value) + (measured.HasValue ? "  (Δ " + (v.Value - Math.Log10(measured.Value)).ToString("+0.00;-0.00;0.00") + " dex)" : "");
+            return Duration(v.Value) + (measured.HasValue ? "  (Δ " + (v.Value - Math.Log10(measured.Value)).ToString("+0.00;-0.00;0.00") + " dex)" : "");
         }
 
         void Toggle()
@@ -540,7 +566,19 @@ namespace AlphaPlanetarium
             }
 
             clock.Text = elapsed.ToString("0.00") + " half-lives";
-            status.Text = survivors + " / " + particles.Count + " sampled survivors  ·  expected " + (particles.Count * Math.Pow(2, -elapsed)).ToString("0.0") + "  ·  log₁₀ elapsed seconds: " + (elapsed > 0 ? (log.Value + Math.Log10(elapsed)).ToString("0.00") : "−∞") + "  ·  seed 42";
+            status.Text = survivors + " / " + particles.Count + " sampled survivors  ·  expected " + (particles.Count * Math.Pow(2, -elapsed)).ToString("0.0") + "  ·  elapsed " + (elapsed > 0 ? Duration(log.Value + Math.Log10(elapsed)) : "0 s") + "  ·  seed 42";
+        }
+
+        void SetLegend()
+        {
+            legend.Inlines.Clear();
+            var first = new System.Windows.Documents.Run(barrierView ? "● Boundary radius" : "● Surviving parent");
+            first.Foreground = Brush(barrierView ? "#F4C875" : "#73E0CF");
+            legend.Inlines.Add(first);
+            var second = new System.Windows.Documents.Run(barrierView ? "     ● Outer turning point" : "     ● Decayed daughter");
+            second.Foreground = Brush(barrierView ? "#7DAFF5" : "#E69A75");
+            legend.Inlines.Add(second);
+            legend.Inlines.Add(new System.Windows.Documents.Run(barrierView ? "\nOne nucleus; radii use the same physical scale." : "\nEach sphere represents one nucleus; size is illustrative."));
         }
 
         Material parentMaterial = new DiffuseMaterial(Brush("#73E0CF")), daughterMaterial = new DiffuseMaterial(Brush("#E69A75"));
@@ -550,7 +588,8 @@ namespace AlphaPlanetarium
             scene.Children.Add(new AmbientLight(Color.FromRgb(85, 100, 120)));
             scene.Children.Add(new DirectionalLight(Colors.White, new Vector3D(-2, -3, -4)));
             barrierRings = new Model3DGroup();
-            scene.Children.Add(barrierRings);
+            populationScene = new Model3DGroup();
+            scene.Children.Add(populationScene);
             Random random = new Random(42);
             MeshGeometry3D mesh = Sphere();
             for (int i = 0; i < 180; i++)
@@ -568,7 +607,7 @@ namespace AlphaPlanetarium
                 tr.Children.Add(new ScaleTransform3D(.23, .23, .23));
                 tr.Children.Add(new TranslateTransform3D(x * 5, y * 5, z * 5));
                 m.Transform = tr;
-                scene.Children.Add(m);
+                populationScene.Children.Add(m);
                 particles.Add(m);
                 lifetimes.Add(-Math.Log(1 - random.NextDouble()) / Math.Log(2));
             }
@@ -634,6 +673,9 @@ namespace AlphaPlanetarium
         {
             barrierRings.Children.Clear();
             double scale = 5.8 / Math.Max(radius, outer);
+            GeometryModel3D nucleus = new GeometryModel3D(Sphere(), new DiffuseMaterial(Brush("#D8A654")));
+            nucleus.Transform = new ScaleTransform3D(radius * scale, radius * scale, radius * scale);
+            barrierRings.Children.Add(nucleus);
             barrierRings.Children.Add(Ring(radius * scale, Brush("#F4C875")));
             barrierRings.Children.Add(Ring(outer * scale, Brush("#7DAFF5")));
         }
