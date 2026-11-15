@@ -528,7 +528,7 @@
         showStep();
         $("play").textContent = "Pause";
         timer = setInterval(() => {
-          step++;
+          step = Math.min(4, step + 1);
           showStep();
           if (step >= 4) {
             clearInterval(timer);
