@@ -56,3 +56,14 @@ func TestCatalogAndProxy(t *testing.T) {
 		t.Fatal("gateway not proxied")
 	}
 }
+
+func TestEmbeddedClient(t *testing.T) {
+	h := handler("http://localhost:1", "missing")
+	for _, tc := range []struct{ path, content string }{{"/", `src="/app.js"`}, {"/app.js", "function measuredComparison"}} {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", tc.path, nil))
+		if w.Code != 200 || !strings.Contains(w.Body.String(), tc.content) {
+			t.Fatalf("client asset %s not served: %d", tc.path, w.Code)
+		}
+	}
+}

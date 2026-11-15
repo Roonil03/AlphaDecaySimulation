@@ -17,7 +17,7 @@ import (
 	"github.com/fogleman/ln/ln"
 )
 
-//go:embed index.html
+//go:embed index.html app.js
 var assets embed.FS
 
 func sceneSVG(radius, outer, yaw, pitch float64) string {
@@ -76,6 +76,10 @@ func handler(gateway, catalog string) http.Handler {
 		io.WriteString(w, sceneSVG(vals[0], vals[1], vals[2], vals[3]))
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/app.js" {
+			http.ServeFileFS(w, r, assets, "app.js")
+			return
+		}
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
