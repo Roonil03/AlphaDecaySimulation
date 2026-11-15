@@ -1,6 +1,6 @@
 # Third-party credits
 
-The spatial viewer uses [ln](https://github.com/fogleman/ln), version `v0.0.0-20170223135521-12e6c6e74459` (commit `12e6c6e74459`), to construct spheres, perform 3D camera projection and hidden-line removal, and generate SVG polylines. Its MIT license is reproduced below.
+The retired web viewer used [ln](https://github.com/fogleman/ln), version `v0.0.0-20170223135521-12e6c6e74459` (commit `12e6c6e74459`), to construct spheres, perform 3D camera projection and hidden-line removal, and generate SVG polylines. The current desktop application does not include ln; its historical attribution and MIT license are retained below.
 
 Copyright (C) 2016 Michael Fogleman
 

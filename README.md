@@ -2,9 +2,13 @@
 
 A reproducible alpha-decay demonstration connecting a barrier calculation, published empirical estimates and a seeded population simulation. The default is Po-212; selected ground-state channels from Sm, Po, Rn and Ra and custom nuclei are supported.
 
-## Run
+## Windows desktop
 
-Install Python 3 and Docker with Compose, then:
+Run the standalone Windows executable for the offline desktop application. No browser, Docker, Python, or web service is required. See [install.md](install.md) for downloading, building, verifying, and troubleshooting it.
+
+## Optional command-line and services
+
+The Python CLI and the kernel, ensemble, and gateway remain available for reproducible calculations. Install Python 3 and Docker with Compose, then run:
 
 ```sh
 python -m unittest discover -s tests -p 'test_*.py' -v
@@ -18,7 +22,7 @@ python -m observatory --validate
 docker compose down
 ```
 
-Open the interactive 3D viewer at [http://127.0.0.1:8090](http://127.0.0.1:8090); see [viewer documentation](services/viewer/README.md). The Python CLI has no third-party dependencies; `--help` describes options, including `--model baseline`, `--population`, `--seed`, and `--url`. For custom inputs, `--binding` is optional total parent nuclear binding energy in MeV. Calculations retry transient startup failures for up to 60 seconds per request. A fixed seed reproduces the sample for a given implementation, but random streams are not promised across versions.
+The Python CLI has no third-party dependencies; `--help` describes options, including `--model baseline`, `--population`, `--seed`, and `--url`. For custom inputs, `--binding` is optional total parent nuclear binding energy in MeV. Calculations retry transient startup failures for up to 60 seconds per request. A fixed seed reproduces the sample for a given implementation, but random streams are not promised across versions.
 
 The central output contains all available predictions. By default survival uses the shell estimate when available, otherwise Qi's estimate, otherwise the WKB baseline. `selected_model` identifies which was used. Simulation times are multiples of the selected predicted half-life (clamped for extreme values). The ±0.1 MeV sweep is a sensitivity illustration, not an experimental uncertainty or fitted confidence interval. For a custom Q the sweep must remain within the kernel's allowed energy range.
 
@@ -34,6 +38,6 @@ Total parent binding energies are AME2020 binding energy per nucleon multiplied 
 
 The research estimate uses the alpha-only universal decay law of [Qi et al.](https://doi.org/10.1103/PhysRevLett.103.072501), fitted to 139 even-even alpha transitions with Z=78–108. Sm (Z=62) and custom values outside that range are extrapolations. The shell estimate implements [Ren et al. (2026)](https://cpc.ihep.ac.cn/article/doi/10.1088/1674-1137/ae167b), a global fit to 550 alpha decays across even-even, even-odd, odd-even and odd-odd cases, including 190 even-even l=0 cases, using measured binding energies. Both are empirical, and their original fitting data may overlap these catalog nuclei: this comparison is not an independent out-of-sample validation. No coefficients are fitted by this project. Neither estimate is available for odd parent Z or A, or nonzero l. The simplified WKB baseline omits nuclear structure, deformation and uncertainty; models can be worse for individual nuclei even when aggregate errors improve.
 
-Compose builds kernel, ensemble and gateway services. The gateway exposes `POST /v1/barrier` and `POST /v1/ensemble`; each service has `GET /health`. See [services documentation](services/README.md) for contracts and domain limits. The viewer is illustrative, not a new decay theory or first simulation.
+Compose builds kernel, ensemble and gateway services. The gateway exposes `POST /v1/barrier` and `POST /v1/ensemble`; each service has `GET /health`. See [services documentation](services/README.md) for contracts and domain limits. The desktop visualization is illustrative, not a new decay theory or first simulation.
 
 
