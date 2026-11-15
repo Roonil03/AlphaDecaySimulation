@@ -216,8 +216,8 @@ async function run() {
     if (result.outer_turning_fm <= 9) {
       $("scene-title").textContent += " · No exterior barrier";
       const note = document.createElement("p");
-      note.style.cssText = "padding:150px 28px 100px;max-width:600px";
-      note.textContent = "The outer turning radius is at or inside the assumed 9 fm nuclear radius. The exterior WKB barrier has zero width (P = 1); the half-life and population below remain available.";
+      note.style.cssText = "padding:100px 24px 55px;max-width:600px;font-size:14px";
+      note.textContent = "Outer turning radius ≤ 9 fm: the exterior WKB barrier has zero width (P = 1). Half-life and population results remain available below.";
       $("scene").append(note);
     } else {
       geometry = { radius: 9, outer: result.outer_turning_fm };
