@@ -19,10 +19,14 @@ jobs:
       - name: Exercise real services
         run: python -m unittest discover -s tests -p 'integration.py' -v
       - name: Reproducible benchmark
-        run: python -m observatory
+        run: |
+          python -m observatory
+          python -m observatory --validate
       - name: Service logs on failure
         if: failure()
         run: docker compose logs
       - name: Stop services
         if: always()
         run: docker compose down --volumes
+
+
