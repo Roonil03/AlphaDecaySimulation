@@ -1,10 +1,12 @@
 # Alpha-decay observatory
 
-A reproducible alpha-decay demonstration connecting a barrier calculation, published empirical estimates and a seeded population simulation. The default is Po-212; selected ground-state channels from Sm, Po, Rn and Ra and custom nuclei are supported.
+A reproducible alpha-decay demonstration connecting a barrier calculation, published empirical estimates and a seeded population simulation. The default is Po-212. The offline catalog includes 13 legacy comparison channels and two separately reported Ren half-life-fit holdouts, Dy-154 and Os-186, plus support for custom nuclei.
 
 ## Windows desktop
 
-Run the standalone Windows executable for the offline desktop application. No browser, Docker, Python, or web service is required. See [install.md](install.md) for downloading, building, verifying, and troubleshooting it.
+Download and extract the `AlphaDecay-windows` artifact from a successful [Tests workflow run](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/ci.yml), then double-click `AlphaDecay.exe`. A source build writes `dist\AlphaDecay.exe`. The executable embeds the catalog and both comparison reports; no browser, Docker, Python, web service or adjacent data file is required. See [install.md](install.md) for the full instructions.
+
+Select **Dy-154** or **Os-186** in the offline app's Reference isotope selector and choose **Ren shell** to inspect a holdout's prediction, measured partial half-life and uncertainty. The measured-reference panel identifies the holdout and its source. [HOLDOUT.md](observatory/HOLDOUT.md) explains why these two channels qualify under Ren's published half-life-fit selection, their uncertainties, and the limits of that inference. The 13 legacy channels can overlap the published fits and are not independent validation. The two-channel holdout is too small to establish general model performance.
 
 ## Optional command-line and services
 
@@ -18,6 +20,7 @@ python -m observatory
 python -m observatory --isotope Ra-224
 python -m observatory --z 84 --a 212 --q 8.9542 --binding 1655.7716856
 python -m observatory --validate
+python -m observatory --validate-holdout
 # When finished:
 docker compose down
 ```
@@ -26,7 +29,7 @@ The Python CLI has no third-party dependencies; `--help` describes options, incl
 
 The central output contains all available predictions. By default survival uses the shell estimate when available, otherwise Qi's estimate, otherwise the WKB baseline. `selected_model` identifies which was used. Simulation times are multiples of the selected predicted half-life (clamped for extreme values). The ±0.1 MeV sweep is a sensitivity illustration, not an experimental uncertainty or fitted confidence interval. For a custom Q the sweep must remain within the kernel's allowed energy range.
 
-All predictions concern the specified **ground-state channel**. Its partial half-life is the lifetime this channel would have if acting alone. The survival curve assumes that single constant-rate channel, independent nuclei and no production; where competing channels exist it is not the physical total-parent survival curve, which requires the sum of all decay rates. This is not a detector simulation.
+Catalog measurements concern the specified **ground-state channel**. The desktop also accepts custom angular momentum; a measured residual is shown only when Z, A, Q and ℓ match the catalog transition. A partial half-life is the lifetime that channel would have if acting alone. The survival curve assumes that single constant-rate channel, independent nuclei and no production; where competing channels exist it is not the physical total-parent survival curve, which requires the sum of all decay rates. This is not a detector simulation.
 
 ## Benchmark and sources
 

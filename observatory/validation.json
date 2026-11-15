@@ -1,5 +1,7 @@
 {
   "description": "Ground-state partial half-life comparison; errors are log10(prediction/reference).",
+  "validation_group": "legacy",
+  "limitations": null,
   "inputs": {
     "l": 0,
     "radius_fm": 9.0,
