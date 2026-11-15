@@ -14,7 +14,7 @@ jobs:
       - name: Portable client tests
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Build, test, and start services
-        # Image builds run Go, Elixir, and locked Rust release numerical tests.
+        # Image builds run viewer client regressions, Go, Elixir, and locked Rust release tests.
         run: docker compose up --build -d
       - name: Exercise real services
         run: python -m unittest discover -s tests -p 'integration.py' -v
