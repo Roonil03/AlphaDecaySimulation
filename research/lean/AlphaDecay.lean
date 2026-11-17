@@ -1,4 +1,8 @@
-import Mathlib
+import Mathlib.Data.Real.Basic
+import Mathlib.Algebra.BigOperators.Ring
+import Mathlib.Tactic.Positivity
+import Mathlib.Tactic.Ring
+import Mathlib.Tactic.FieldSimp
 
 /- Small invariants for the rate equation used by the native model. These results
    do not establish numerical accuracy or the physical adequacy of the model. -/
@@ -32,6 +36,7 @@ theorem turning_point_outside_radius {c q r : ℝ} (hq : 0 < q)
     (h : r * q < c) : r < c / q := by
   exact (lt_div_iff₀ hq).2 h
 end AlphaDecay
+
 
 
 

@@ -1,0 +1,96 @@
+name: Research tools
+on:
+  push:
+  pull_request:
+jobs:
+  research:
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache-dependency-path: research/go/go.mod
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: '27.3'
+          elixir-version: '1.18.4'
+      - name: Linux graphics dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+      - name: Build native core
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --parallel 2
+      - name: Test Go scheduler
+        working-directory: research/go
+        run: go test ./...
+      - name: Build scheduler Linux
+        if: runner.os == 'Linux'
+        working-directory: research/go
+        run: go build -o ../../scheduler .
+      - name: Build scheduler Windows
+        if: runner.os == 'Windows'
+        working-directory: research/go
+        run: go build -o ../../scheduler.exe .
+      - name: Install Elixir dependencies
+        working-directory: research/elixir
+        run: |
+          mix local.hex --force
+          mix deps.get
+      - name: Elixir unit tests
+        if: runner.os == 'Linux'
+        working-directory: research/elixir
+        run: mix test
+      - name: Install Python analysis dependencies
+        run: python -m pip install -r research/python/requirements.txt
+      - name: Native pipeline Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          export ALPHADECAY_CORE="$PWD/build/AlphaDecay"
+          python -m unittest discover -s tests -p 'test_*.py' -v
+          (cd research/python && python -m unittest -v)
+          python research/python/fit.py research/python/data/example-v1.json --core "$ALPHADECAY_CORE" --output fit.json --plot fit.png
+          test -s fit.png
+          python research/tests/native_campaign.py --core "$ALPHADECAY_CORE" --scheduler "$PWD/scheduler"
+          python research/package.py --scheduler scheduler --output research-linux.tar.gz
+      - name: Native pipeline Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:ALPHADECAY_CORE = (Resolve-Path build/Release/AlphaDecay.exe).Path
+          python -m unittest discover -s tests -p 'test_*.py' -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Push-Location research/python
+          python -m unittest -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+          python research/python/fit.py research/python/data/example-v1.json --core $env:ALPHADECAY_CORE --output fit.json --plot fit.png
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path fit.png)) { exit 1 }
+          python research/tests/native_campaign.py --core $env:ALPHADECAY_CORE --scheduler ./scheduler.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python research/package.py --scheduler scheduler.exe --output research-windows.zip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AlphaDecay-research-${{ runner.os }}
+          path: research-${{ runner.os == 'Windows' && 'windows.zip' || 'linux.tar.gz' }}
+          if-no-files-found: error
+  proofs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Lean and build proofs
+        working-directory: research/lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/lake" exe cache get
+          "$HOME/.elan/bin/lake" build
