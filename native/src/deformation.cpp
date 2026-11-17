@@ -35,20 +35,26 @@ DeformedWkbResult calculate_deformed_wkb(const SphericalWkbRequest& req, Deforma
   if(d.beta2==0&&d.beta4==0) { auto s=calculate_spherical_wkb(req); out.status=s.status; out.message=s.message; out.log10_penetrability=s.log10_penetrability; out.log10_half_life_s=s.log10_half_life_s; out.angular_points=1; return out; }
   // Compare independent multipole truncations at several physically relevant points.
   for(double x: {0.0,0.5,1.0}) for(double r: {req.potential.charge_radius_fm,1.5*req.potential.charge_radius_fm,3*req.potential.charge_radius_fm}) out.coulomb_error_mev=std::max(out.coulomb_error_mev,std::abs(deformed_coulomb(req.potential,d,r,x,24,256)-deformed_coulomb(req.potential,d,r,x,32,512)));
-  out.multipole_order=24;
-  // Tabulate radial multipoles once; the same charge distribution serves every
-  // orientation. Exterior values use the exact multipole power law.
-  constexpr int order=24, nq=256; constexpr double dr=0.02;
+  // Construct independent refinements of multipole order, source quadrature,
+  // and radial table spacing; compare their resulting penetrabilities.
   const double boundary=std::max(req.potential.charge_radius_fm*3,req.potential.nuclear_radius_fm+40*req.potential.diffuseness_fm);
-  const int count=static_cast<int>(std::ceil(boundary/dr));
-  if(count>20000) throw std::invalid_argument("Charge scale exceeds table limit");
   const double norm=normalization(d), R=req.potential.charge_radius_fm;
-  std::array<double,nq> source{}; std::array<std::array<double,13>,nq> polys{};
-  for(int i=0;i<nq;i++){double u=(i+0.5)/nq;source[i]=R*raw(d,u)/norm;for(int k=0;k<13;k++) polys[i][k]=legendre(2*k,u);}
-  std::vector<std::array<double,13>> table(count+1);
-  for(int j=0;j<=count;j++){double r=std::max(j*dr,1e-8);for(int i=0;i<nq;i++){double a=source[i], z=std::min(a,r);for(int k=0;k<13;k++){int l=2*k;double v=std::pow(z/r,l+1)*z*z/(l+3);if(a>r) v+=l==2?r*r*std::log(a/r):r*r*(std::pow(a/r,2-l)-1)/(2-l);table[j][k]+=polys[i][k]*v/nq;}}}
+  using Row=std::array<double,17>;
+  struct Table { double dr; int order; std::vector<Row> rows; };
+  auto build=[&](int order,int nq,double dr) {
+    const int count=static_cast<int>(std::ceil(boundary/dr));
+    if(count>40000) throw std::invalid_argument("Charge scale exceeds table limit");
+    std::vector<double> source(nq); std::vector<Row> polys(nq);
+    for(int i=0;i<nq;i++){double u=(i+0.5)/nq;source[i]=R*raw(d,u)/norm;for(int k=0;k<=order/2;k++) polys[i][k]=legendre(2*k,u);}
+    Table t{dr,order,std::vector<Row>(count+1)};
+    for(int j=0;j<=count;j++){double r=std::max(j*dr,1e-8);for(int i=0;i<nq;i++){double a=source[i], z=std::min(a,r);for(int k=0;k<=order/2;k++){int l=2*k;double v=std::pow(z/r,l+1)*z*z/(l+3);if(a>r) v+=l==2?r*r*std::log(a/r):r*r*(std::pow(a/r,2-l)-1)/(2-l);t.rows[j][k]+=polys[i][k]*v/nq;}}}
+    return t;
+  };
+  auto coarse=build(24,256,0.02), fine=build(32,512,0.01);
+  out.multipole_order=32;
   const double factor=3*2*req.potential.daughter_z*e2/(R*R*R);
-  auto average=[&](int n) {
+  auto average=[&](int n, const Table& table) {
+   const int count=static_cast<int>(table.rows.size())-1; const double dr=table.dr;
    double maxlog=-INFINITY, sum=0;
    for(int i=0;i<n;i++) {
     // Gauss-Legendre nodes on [0,1].
@@ -56,10 +62,10 @@ DeformedWkbResult calculate_deformed_wkb(const SphericalWkbRequest& req, Deforma
     do { double p0=1,p1=z; for(int k=2;k<=n;k++){double p=((2*k-1)*z*p1-(k-1)*p0)/k;p0=p1;p1=p;} deriv=n*(z*p1-p0)/(z*z-1); last=z; z=last-p1/deriv; } while(std::abs(z-last)>1e-14);
     double x=(z+1)/2, weight=1/((1-z*z)*deriv*deriv);
     auto p=req.potential; p.nuclear_radius_fm=deformed_radius(p.nuclear_radius_fm,d,x);
-    std::array<double,13> angle{}; for(int k=0;k<13;k++) angle[k]=legendre(2*k,x);
+    std::array<double,17> angle{}; for(int k=0;k<=table.order/2;k++) angle[k]=legendre(2*k,x);
     auto f=[&](double r){
-      double c=0; if(r>=count*dr){double ratio=count*dr/r;for(int k=0;k<13;k++) c+=angle[k]*table[count][k]*std::pow(ratio,2*k+1);}
-      else {int j=static_cast<int>(r/dr);double t=r/dr-j;for(int k=0;k<13;k++) c+=angle[k]*(table[j][k]*(1-t)+table[j+1][k]*t);}
+      double c=0; if(r>=count*dr){double ratio=count*dr/r;for(int k=0;k<=table.order/2;k++) c+=angle[k]*table.rows[count][k]*std::pow(ratio,2*k+1);}
+      else {int j=static_cast<int>(r/dr);double t=r/dr-j;for(int k=0;k<=table.order/2;k++) c+=angle[k]*(table.rows[j][k]*(1-t)+table.rows[j+1][k]*t);}
       return nuclear_potential(p,r)+factor*c+centrifugal_potential(p,r);
     };
     auto result=calculate_radial_wkb(req,f,p.nuclear_radius_fm);
@@ -69,9 +75,10 @@ DeformedWkbResult calculate_deformed_wkb(const SphericalWkbRequest& req, Deforma
    }
    return maxlog+std::log10(sum);
   };
-  double prior=average(8), value=prior;
-  for(int n: {16,32,64}) { value=average(n); out.angular_points=n; out.angular_error_log10=std::abs(value-prior); if(out.angular_error_log10<1e-4) break; prior=value; }
-  if(out.angular_error_log10>=1e-4 || out.coulomb_error_mev>0.01) {out.status="numerical_error"; out.message="Angular or Coulomb multipole convergence threshold not met."; return out;}
+  double prior=average(8,fine), value=prior;
+  for(int n: {16,32,64}) { value=average(n,fine); out.angular_points=n; out.angular_error_log10=std::abs(value-prior); if(out.angular_error_log10<1e-4) break; prior=value; }
+  out.charge_error_log10=std::abs(value-average(out.angular_points,coarse));
+  if(out.angular_error_log10>=1e-4 || out.charge_error_log10>=1e-4) {out.status="numerical_error"; out.message="Angular or charge refinement did not converge to 1e-4 in log10 penetrability."; return out;}
   out.log10_penetrability=value; out.status=req.preformation==0?"zero_preformation":"ok";
   if(req.preformation>0) out.log10_half_life_s=std::log10(std::log(2.0))-std::log10(req.assault_hz)-std::log10(req.preformation)-value;
   return out;
