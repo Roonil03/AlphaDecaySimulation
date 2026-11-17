@@ -82,6 +82,10 @@ if(ALPHA_ENABLE_NUMEROV)
   target_sources(alpha_core PRIVATE native/src/numerov.cpp)
   target_link_libraries(alpha_core PUBLIC alpha_numerov)
   target_compile_definitions(alpha_core PUBLIC ALPHA_ENABLE_NUMEROV=1)
+  add_executable(analysis_cancellation_test native/tests/analysis_cancellation_test.cpp native/src/channel_json.cpp)
+  target_include_directories(analysis_cancellation_test PRIVATE native/src)
+  target_link_libraries(analysis_cancellation_test PRIVATE alpha_core nlohmann_json::nlohmann_json)
+  add_test(NAME analysis-cancellation COMMAND analysis_cancellation_test)
   add_executable(numerov_abi_test native/tests/numerov_abi_test.cpp)
   target_link_libraries(numerov_abi_test PRIVATE alpha_numerov)
   add_test(NAME numerov-abi COMMAND numerov_abi_test)
@@ -91,6 +95,7 @@ if(ALPHA_ENABLE_NUMEROV)
   add_test(NAME numerov-rust COMMAND ${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${NUMEROV_TARGET_DIR}
     ${CARGO_EXECUTABLE} test --locked --manifest-path ${NUMEROV_MANIFEST})
 endif()
+
 
 
 

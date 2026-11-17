@@ -7,10 +7,11 @@
 #include "alpha/uncertainty.hpp"
 #ifdef ALPHA_ENABLE_NUMEROV
 #include "alpha/numerov.hpp"
+#endif
 #include <future>
 #include <memory>
 #include <chrono>
-#endif
+#include <atomic>
 
 #include "alpha/spherical_model.hpp"
 
@@ -330,6 +331,7 @@ int viewer(int argc, char **argv) {
     struct GuiChannel { double ex=0, preformation=0.1, assault_hz=1e21; int l=0, twice_j=0, parity=1; bool daughter_known=false, custom_rate=false; };
     std::vector<GuiChannel> channel_inputs(1);
     json channel_result;
+    std::future<json> channel_job; auto channel_cancel=std::make_shared<std::atomic_bool>(false); bool discard_channel=false;
     std::optional<double> combined_log_half;
     std::string error;
     std::mt19937 rng(42);
@@ -342,6 +344,7 @@ int viewer(int argc, char **argv) {
           {r * xy * std::cos(phi), r * z, r * xy * std::sin(phi), u(rng)});
     }
     auto select = [&] {
+      channel_cancel->store(true); discard_channel=true; combined_log_half.reset();
 #ifdef ALPHA_ENABLE_NUMEROV
       analysis_cancel->store(true); discard_analysis=true; analysis_result.reset();
 #endif
@@ -367,6 +370,7 @@ int viewer(int argc, char **argv) {
       return input;
     };
     auto calculate = [&] {
+      if (channel_job.valid()) return;
       try {
         reference_available = false;
         result = {};
@@ -394,8 +398,9 @@ int viewer(int argc, char **argv) {
               if(c.daughter_known) row["daughter_spin"]={{"twice_j",c.twice_j},{"parity",c.parity}};
               data["channels"].push_back(row);
             }
-            channel_result=run_channels(data,input); combined_log_half.reset();
-            if(!channel_result["log10_total_half_life_s"].is_null()) combined_log_half=channel_result["log10_total_half_life_s"].get<double>();
+            combined_log_half.reset(); channel_result=json{};
+            channel_cancel=std::make_shared<std::atomic_bool>(false); auto token=channel_cancel; discard_channel=false;
+            channel_job=std::async(std::launch::async,[data,input,token] {return run_channels(data,input,[token]{return token->load();});});
           }
         } else {
           result=alpha::calculate(request);
@@ -424,6 +429,13 @@ int viewer(int argc, char **argv) {
       beta2=std::stod(argv[7]); beta4=std::stod(argv[8]); advanced=true; barrier=true;
     }
     calculate();
+    auto poll_channels = [&] {
+      if(channel_job.valid() && channel_job.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
+        try { auto value=channel_job.get(); if(!discard_channel) { channel_result=std::move(value); if(!channel_result["log10_total_half_life_s"].is_null()) combined_log_half=channel_result["log10_total_half_life_s"].get<double>(); } }
+        catch(const std::exception& e) { if(!discard_channel) {valid=false; error=e.what();} }
+      }
+    };
+    if(preview && channel_job.valid()) {channel_job.wait(); poll_channels();}
     auto selected_log = [&]() -> std::optional<double> {
       if (!valid) return {};
       if (advanced && potential_model && model == 0) return combined_log_half;
@@ -435,6 +447,7 @@ int viewer(int argc, char **argv) {
     int frames = 0;
     while (!glfwWindowShouldClose(window)) {
       glfwPollEvents();
+      poll_channels();
       double now = glfwGetTime(), dt = std::min(.1, now - last);
       last = now;
       if (playing) {
@@ -540,6 +553,7 @@ int viewer(int argc, char **argv) {
         changed = true;
       }
       if (changed) {
+        channel_cancel->store(true); discard_channel=true; combined_log_half.reset();
 #ifdef ALPHA_ENABLE_NUMEROV
         analysis_cancel->store(true); discard_analysis=true; analysis_result.reset();
 #endif
@@ -547,8 +561,10 @@ int viewer(int argc, char **argv) {
         playing = false;
         error.clear();
       }
-      if (ImGui::Button("Calculate"))
-        calculate();
+      if (channel_job.valid()) {
+        ImGui::TextUnformatted("Calculating channels in background...");
+        if (ImGui::Button("Cancel channels")) {channel_cancel->store(true); discard_channel=true;}
+      } else if (ImGui::Button("Calculate")) calculate();
       ImGui::SameLine();
       if (!error.empty())
         ImGui::TextWrapped("%s", error.c_str());
@@ -597,11 +613,13 @@ int viewer(int argc, char **argv) {
           if(n.log10_transmission) ImGui::Text("log10 transmission: %.8g",*n.log10_transmission);
           if(n.step_error_decades && n.match_error_decades) ImGui::Text("Step / exterior error: %.3g / %.3g decades",*n.step_error_decades,*n.match_error_decades);
           if(n.wkb_difference_decades) ImGui::Text("Numerov minus WKB: %.5g decades",*n.wkb_difference_decades);
+          if(convention==1) ImGui::TextWrapped("Comparison uses different centrifugal terms: Numerov physical, WKB Langer.");
           if(n.log10_half_life_s) ImGui::Text("Numerov log10 half-life: %.8g",*n.log10_half_life_s);
           ImGui::Text("Parameter draws: %zu accepted, %zu rejected",u.accepted,u.rejected);
           if(u.log10_half_life_p50) ImGui::Text("log10 half-life p16 / p50 / p84: %.4g / %.4g / %.4g",*u.log10_half_life_p16,*u.log10_half_life_p50,*u.log10_half_life_p84);
           ImGui::TextWrapped("%s",u.message.c_str());
-          ImGui::TextWrapped("Inner-lead radius is a model assumption. Physical centrifugal term; same preformation and assault frequency. Not a resonance width.");
+          ImGui::TextWrapped("Spherical ground-state comparison; deformed channel transmission is not included.");
+        ImGui::TextWrapped("Inner-lead radius is a model assumption. Physical centrifugal term; same preformation and assault frequency. Not a resonance width.");
         }
         ImGui::TreePop();
       }
@@ -748,6 +766,7 @@ int viewer(int argc, char **argv) {
       }
       glfwSwapBuffers(window);
     }
+    channel_cancel->store(true);
 #ifdef ALPHA_ENABLE_NUMEROV
     analysis_cancel->store(true);
 #endif
@@ -759,6 +778,9 @@ int viewer(int argc, char **argv) {
   glfwTerminate();
   return 0;
 }
+
+
+
 
 
 

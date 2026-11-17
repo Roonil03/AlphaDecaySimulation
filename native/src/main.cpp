@@ -106,6 +106,17 @@ for (const char *key : {"deformation", "parent_spin", "channels", "competing_rat
     auto input=alpha::make_spherical_wkb_request(p,v);
     json out=run_channels(channel_input,input);
     out["schema_version"]=1; out["potential_model"]=model; out["centrifugal_convention"]=convention;
+    // Each returned numerical comparison is a spherical reference for the
+    // selected channel, not a deformed transmission or a total-width result.
+    if(j.contains("numerov") || j.contains("uncertainty")) {
+      for (std::size_t i=0;i<out["channels"].size();++i) {
+        auto& row=out["channels"][i]; const auto& spec=channel_input["channels"][i];
+        if(row["status"]!="ok" || row["l"].is_null()) continue;
+        auto channel=input; channel.q_mev=row["q_mev"].get<double>(); channel.potential.l=row["l"].get<int>();
+        channel.preformation=spec.value("preformation",input.preformation); channel.assault_hz=spec.value("assault_hz",input.assault_hz);
+        json analysis; append_numerical_analyses(j,channel,analysis); analysis["scope"]="spherical_channel_reference"; row["numerical_analysis"]=analysis;
+      }
+    }
     return out;
   }
   const auto &r=calculation.spherical;
@@ -206,6 +217,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 }
+
 
 
 

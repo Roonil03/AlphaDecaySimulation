@@ -71,3 +71,4 @@ Optional `uncertainty` accepts nonnegative integer `seed`, integer `sample_count
 
 Deformed shapes and daughter-channel JSON, convergence diagnostics, and viewer controls are described in [deformed channels](../docs/deformed-channels.md).
 
+For requests with daughter channels, numerical analysis is attached separately to each open selected channel using that channel's Q, l, preformation and assault frequency. It is labeled `spherical_channel_reference`; it does not calculate a deformed transmission or replace the orientation-averaged WKB rate. Viewer analysis likewise uses the spherical ground-state inputs. Deformed channel calculations run in a separate cancellable background job.

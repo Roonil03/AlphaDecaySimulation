@@ -27,7 +27,7 @@ void append_numerical_analyses(const json& j,const alpha::SphericalWkbRequest& i
         const auto& n=j.at("numerov"); keys(n,{"lead_radius_fm","match_radius_fm","step_fm"});
         alpha::NumerovOptions o; o.lead_radius_fm=n.value("lead_radius_fm",o.lead_radius_fm); o.match_radius_fm=n.value("match_radius_fm",o.match_radius_fm); o.step_fm=n.value("step_fm",o.step_fm);
         auto r=alpha::calculate_numerov(input,o);
-        out["numerov"]={{"status",r.status},{"message",r.message},{"log10_transmission",number(r.log10_transmission)},{"log10_half_life_s",number(r.log10_half_life_s)},{"step_error_decades",number(r.step_error_decades)},{"match_error_decades",number(r.match_error_decades)},{"wkb_difference_decades",number(r.wkb_difference_decades)},{"lead_radius_fm",o.lead_radius_fm},{"centrifugal_convention","physical"}};
+        out["numerov"]={{"status",r.status},{"message",r.message},{"log10_transmission",number(r.log10_transmission)},{"log10_half_life_s",number(r.log10_half_life_s)},{"step_error_decades",number(r.step_error_decades)},{"match_error_decades",number(r.match_error_decades)},{"wkb_difference_decades",number(r.wkb_difference_decades)},{"lead_radius_fm",o.lead_radius_fm},{"centrifugal_convention","physical"},{"wkb_centrifugal_convention",input.potential.centrifugal==alpha::CentrifugalConvention::physical ? "physical" : "langer_wkb"},{"comparison_note",input.potential.centrifugal==alpha::CentrifugalConvention::physical ? "Same physical centrifugal term" : "Different centrifugal terms: Numerov is physical; WKB uses Langer"}};
 #else
         throw std::invalid_argument("Numerov support disabled at build time");
 #endif
@@ -43,3 +43,4 @@ void append_numerical_analyses(const json& j,const alpha::SphericalWkbRequest& i
         out["uncertainty"]={{"status",x.status},{"message",x.message},{"seed",r.seed},{"sample_count",r.draws},{"accepted",x.accepted},{"rejected",x.rejected},{"assumed_independent",x.assumed_independent},{"log10_half_life_p16",number(x.log10_half_life_p16)},{"log10_half_life_p50",number(x.log10_half_life_p50)},{"log10_half_life_p84",number(x.log10_half_life_p84)}};
     }
 }
+
