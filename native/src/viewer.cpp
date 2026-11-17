@@ -1,5 +1,7 @@
 #include "viewer.hpp"
 #include "alpha/core.hpp"
+#include "alpha/spherical_wkb.hpp"
+#include "alpha/spherical_model.hpp"
 #include "embedded.hpp"
 #include <glad/gl.h>
 #include <imgui.h>
@@ -234,12 +236,12 @@ struct Scene {
 int viewer(int argc, char **argv) {
   bool preview = argc >= 2 && std::string(argv[1]) == "--render-preview";
   if ((!preview && argc != 1) ||
-      (preview && (argc < 3 || argc > 6 || argc == 5)))
+      (preview && (argc < 3 || argc > 7 || argc == 5)))
     throw std::invalid_argument(
         "usage: AlphaDecay [--run|--self-test|--render-preview path "
-        "[catalog-id [width height]]]");
+        "[catalog-id [width height [external|square_well|woods_saxon]]]]");
   int width = 1280, height = 800;
-  if (argc == 6) {
+  if (argc >= 6) {
     width = std::stoi(argv[4]);
     height = std::stoi(argv[5]);
     if (width < 640 || height < 480 || width > 4096 || height > 4096)
@@ -287,9 +289,11 @@ int viewer(int argc, char **argv) {
     Scene scene;
     alpha::Request request;
     alpha::Result result{};
-    bool valid = false, playing = false, barrier = false;
+    bool valid = false, playing = false, barrier = false, reference_available = false;
     float elapsed = 0;
-    int model = 0;
+    int model = 0, potential_model = 0, convention = 0;
+    double depth = 100, nuclear_radius = 9, diffuseness = .65, charge_radius = 9;
+    alpha::SphericalWkbResult alternative;
     std::string error;
     std::mt19937 rng(42);
     std::uniform_real_distribution<float> u(0, 1);
@@ -306,14 +310,30 @@ int viewer(int argc, char **argv) {
       request.parent_a = x["a"];
       request.q_mev = x["q_mev"];
       request.l = x.value("l", 0);
-      request.parent_binding_mev = x["parent_binding_mev"].get<double>();
+      request.parent_binding_mev = x.contains("parent_binding_mev") && !x["parent_binding_mev"].is_null()
+                                       ? std::optional<double>{x["parent_binding_mev"].get<double>()} : std::nullopt;
       valid = false;
       playing = false;
       elapsed = 0;
     };
     auto calculate = [&] {
       try {
-        result = alpha::calculate(request);
+        reference_available = false;
+        result = {};
+        if (potential_model) {
+          alpha::SphericalPotential v;
+          v.kind=potential_model == 1 ? alpha::PotentialKind::square_well : alpha::PotentialKind::woods_saxon;
+          v.nuclear_depth_mev=depth; v.nuclear_radius_fm=nuclear_radius;
+          v.diffuseness_fm=diffuseness; v.charge_radius_fm=charge_radius;
+          v.centrifugal=convention == 0 ? alpha::CentrifugalConvention::physical : alpha::CentrifugalConvention::langer_wkb;
+          auto calculation=alpha::calculate_spherical_model(request, v);
+          alternative=calculation.spherical;
+          reference_available=calculation.external_reference.has_value();
+          if (reference_available) result=*calculation.external_reference;
+        } else {
+          result=alpha::calculate(request);
+          reference_available=true;
+        }
         valid = true;
         error.clear();
         elapsed = 0;
@@ -325,7 +345,19 @@ int viewer(int argc, char **argv) {
       }
     };
     select();
+    if (argc == 7) {
+      const std::string preview_model=argv[6];
+      if (preview_model == "square_well") potential_model=1;
+      else if (preview_model == "woods_saxon") potential_model=2;
+      else if (preview_model != "external") throw std::invalid_argument("unknown preview potential");
+    }
     calculate();
+    auto selected_log = [&]() -> std::optional<double> {
+      if (!valid) return {};
+      if (model == 1) return reference_available ? result.research_log10_half_life_s : std::nullopt;
+      if (model == 2) return reference_available ? result.shell_log10_half_life_s : std::nullopt;
+      return potential_model ? alternative.log10_half_life_s : std::optional<double>{result.log10_half_life_s};
+    };
     double last = glfwGetTime();
     int frames = 0;
     while (!glfwWindowShouldClose(window)) {
@@ -341,14 +373,12 @@ int viewer(int argc, char **argv) {
       glfwGetFramebufferSize(window, &w, &h);
       if (w <= 0 || h <= 0)
         continue;
-      bool model_available =
-          valid &&
-          (model == 0 || (model == 1 && result.research_log10_half_life_s) ||
-           (model == 2 && result.shell_log10_half_life_s));
+      bool model_available = selected_log().has_value();
       scene.draw(w, h, points,
                  model_available ? 1 - std::exp(-std::log(2.0) * elapsed) : 1,
                  barrier && valid,
-                 valid ? request.radius_fm / result.outer_turning_fm : 0);
+                 valid && (!potential_model || alternative.outer_turning_fm) ?
+                     (potential_model ? alternative.inner_turning_fm.value_or(nuclear_radius) / *alternative.outer_turning_fm : request.radius_fm / result.outer_turning_fm) : 0);
       ImGui_ImplOpenGL3_NewFrame();
       ImGui_ImplGlfw_NewFrame();
       ImGui::NewFrame();
@@ -360,7 +390,7 @@ int viewer(int argc, char **argv) {
                    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
                        ImGuiWindowFlags_NoCollapse);
       ImGui::TextWrapped(
-          "Spherical external-barrier model | one alpha channel");
+          "Spherical WKB models | one alpha channel");
       ImGui::Separator();
       std::string label = catalog[selected]["symbol"].get<std::string>() + "-" +
                           std::to_string(catalog[selected]["a"].get<int>());
@@ -376,7 +406,18 @@ int viewer(int argc, char **argv) {
         }
         ImGui::EndCombo();
       }
+      ImGui::PushItemWidth(155.0f);
       bool changed = false;
+      const char *potentials[] = {"External reference", "Square well", "Woods-Saxon"};
+      changed |= ImGui::Combo("Potential", &potential_model, potentials, 3);
+      if (potential_model) {
+        changed |= ImGui::InputDouble("Well depth (MeV)", &depth, 0, 0, "%.6g");
+        changed |= ImGui::InputDouble("Nuclear radius (fm)", &nuclear_radius, 0, 0, "%.6g");
+        if (potential_model == 2) changed |= ImGui::InputDouble("Diffuseness (fm)", &diffuseness, 0, 0, "%.6g");
+        changed |= ImGui::InputDouble("Charge radius (fm)", &charge_radius, 0, 0, "%.6g");
+        const char *conventions[] = {"Physical l(l+1)", "Langer WKB (l+1/2)^2"};
+        changed |= ImGui::Combo("Centrifugal term", &convention, conventions, 2);
+      }
       bool identity_changed = ImGui::InputInt("Parent Z", &request.parent_z);
       identity_changed |= ImGui::InputInt("Parent A", &request.parent_a);
       if (identity_changed)
@@ -385,7 +426,7 @@ int viewer(int argc, char **argv) {
       changed |= ImGui::InputDouble("Q (MeV)", &request.q_mev, 0, 0, "%.8g");
       changed |= ImGui::InputInt("Angular momentum l", &request.l);
       changed |=
-          ImGui::InputDouble("Boundary (fm)", &request.radius_fm, 0, 0, "%.6g");
+          ImGui::InputDouble("External boundary (fm)", &request.radius_fm, 0, 0, "%.6g");
       changed |= ImGui::InputDouble("Preformation", &request.preformation, 0, 0,
                                     "%.6g");
       changed |= ImGui::InputDouble("Assault frequency (Hz)",
@@ -407,63 +448,12 @@ int viewer(int argc, char **argv) {
       if (!error.empty())
         ImGui::TextWrapped("%s", error.c_str());
       ImGui::Separator();
-      const char *models[] = {"WKB", "Qi (2009)", "Ren (2026)"};
+      const char *models[] = {"Selected WKB", "Qi (2009)", "Ren (2026)"};
       if (ImGui::Combo("Playback model", &model, models, 3)) {
         playing = false;
         elapsed = 0;
       }
-      bool available =
-          valid &&
-          (model == 0 || (model == 1 && result.research_log10_half_life_s) ||
-           (model == 2 && result.shell_log10_half_life_s));
-      if (valid) {
-        ImGui::Text("WKB log10(t / s): %.8g", result.log10_half_life_s);
-        ImGui::Text("WKB half-life: %s",
-                    time_label(result.log10_half_life_s).c_str());
-        if (result.research_log10_half_life_s)
-          ImGui::Text("Qi log10(t / s): %.8g",
-                      *result.research_log10_half_life_s);
-        if (result.shell_log10_half_life_s)
-          ImGui::Text("Ren log10(t / s): %.8g",
-                      *result.shell_log10_half_life_s);
-        ImGui::Text("Outer turning point: %.5g fm", result.outer_turning_fm);
-        auto &x = catalog[selected];
-        bool match = request.parent_z == x["z"].get<int>() &&
-                     request.parent_a == x["a"].get<int>() &&
-                     request.q_mev == x["q_mev"].get<double>() &&
-                     request.l == x.value("l", 0);
-        if (match) {
-          double measured = x["partial_half_life_s"].get<double>();
-          ImGui::Text("Measured partial half-life: %.6g s", measured);
-          ImGui::Text("Measured: %s", time_label(std::log10(measured)).c_str());
-          if (x.contains("half_life_uncertainty_s"))
-            ImGui::Text("Half-life uncertainty: %.4g s",
-                        x["half_life_uncertainty_s"].get<double>());
-          if (x.contains("q_uncertainty_mev"))
-            ImGui::Text("Q uncertainty: %.4g MeV",
-                        x["q_uncertainty_mev"].get<double>());
-          if (available) {
-            double pred = model == 0   ? result.log10_half_life_s
-                          : model == 1 ? *result.research_log10_half_life_s
-                                       : *result.shell_log10_half_life_s;
-            ImGui::Text("Residual log10(predicted / measured): %.5g",
-                        pred - std::log10(measured));
-          }
-          ImGui::TextWrapped("Source: %s",
-                             x["source_url"].get<std::string>().c_str());
-          for (const char *key :
-               {"branch_source_url", "binding_source_url", "branch_note",
-                "binding_note", "holdout_reason"})
-            if (x.contains(key))
-              ImGui::TextWrapped("%s: %s", key,
-                                 x[key].get<std::string>().c_str());
-          if (x.value("validation_group", std::string{}) == "ren_holdout")
-            ImGui::TextWrapped("Ren holdout: excluded by the published "
-                               "half-life uncertainty criterion.");
-        } else
-          ImGui::TextWrapped(
-              "Custom channel: no catalog measurement associated.");
-      }
+      bool available = selected_log().has_value();
       if (!available)
         ImGui::TextWrapped("Selected model unavailable. Calculate valid "
                            "even-even l=0 inputs for Qi/Ren.");
@@ -476,9 +466,7 @@ int viewer(int argc, char **argv) {
           playing = false;
         }
         ImGui::SliderFloat("Elapsed half-lives", &elapsed, 0, 10);
-        double log_half = model == 0   ? result.log10_half_life_s
-                          : model == 1 ? *result.research_log10_half_life_s
-                                       : *result.shell_log10_half_life_s;
+        double log_half = *selected_log();
         ImGui::Text("Selected half-life: %s", time_label(log_half).c_str());
         if (elapsed > 0)
           ImGui::Text("Elapsed: %s",
@@ -492,9 +480,74 @@ int viewer(int argc, char **argv) {
         ImGui::Text("Survivors: %d sampled / %.1f expected of 180", sampled,
                     180 * survival);
       }
+      if (valid) {
+        if (!potential_model) {
+          ImGui::Text("External WKB log10(t / s): %.8g", result.log10_half_life_s);
+          ImGui::Text("External WKB half-life: %s", time_label(result.log10_half_life_s).c_str());
+        } else {
+          ImGui::Text("Spherical status: %s", alternative.status.c_str());
+          if (!alternative.message.empty()) ImGui::TextWrapped("%s", alternative.message.c_str());
+          if (alternative.log10_half_life_s) ImGui::Text("Spherical log10(t / s): %.8g", *alternative.log10_half_life_s);
+          if (alternative.log10_penetrability) ImGui::Text("log10 penetrability: %.8g", *alternative.log10_penetrability);
+          if (alternative.inner_turning_fm) ImGui::Text("Inner barrier boundary: %.5g fm", *alternative.inner_turning_fm);
+          if (reference_available) ImGui::Text("External reference log10(t / s): %.8g", result.log10_half_life_s);
+        }
+        if (result.research_log10_half_life_s)
+          ImGui::Text("Qi log10(t / s): %.8g",
+                      *result.research_log10_half_life_s);
+        if (result.shell_log10_half_life_s)
+          ImGui::Text("Ren log10(t / s): %.8g",
+                      *result.shell_log10_half_life_s);
+        if (!potential_model) ImGui::Text("Outer turning point: %.5g fm", result.outer_turning_fm);
+        else if (alternative.outer_turning_fm) ImGui::Text("Outer turning point: %.5g fm", *alternative.outer_turning_fm);
+        auto &x = catalog[selected];
+        bool match = request.parent_z == x["z"].get<int>() &&
+                     request.parent_a == x["a"].get<int>() &&
+                     request.q_mev == x["q_mev"].get<double>() &&
+                     request.l == x.value("l", 0);
+        if (match) {
+          double measured = x["partial_half_life_s"].get<double>();
+          ImGui::Text("Measured partial half-life: %.6g s", measured);
+          ImGui::Text("Measured: %s", time_label(std::log10(measured)).c_str());
+          if (x.contains("half_life_uncertainty_s"))
+            ImGui::Text("Half-life uncertainty: %.4g s",
+                        x["half_life_uncertainty_s"].get<double>());
+          if (x.contains("half_life_uncertainty_minus_s") && x.contains("half_life_uncertainty_plus_s"))
+            ImGui::Text("Half-life uncertainty: +%.4g / -%.4g s", x["half_life_uncertainty_plus_s"].get<double>(), x["half_life_uncertainty_minus_s"].get<double>());
+          if (x.contains("q_uncertainty_mev"))
+            ImGui::Text("Q uncertainty: %.4g MeV",
+                        x["q_uncertainty_mev"].get<double>());
+          if (available) {
+            double pred = *selected_log();
+            ImGui::Text("Residual log10(predicted / measured): %.5g",
+                        pred - std::log10(measured));
+          }
+          if (ImGui::TreeNode("Sources and historical observations")) {
+          ImGui::TextWrapped("Source: %s",
+                             x["source_url"].get<std::string>().c_str());
+          for (const char *key :
+               {"branch_source_url", "binding_source_url", "branch_note",
+                "binding_note", "holdout_reason", "q_source_url"})
+            if (x.contains(key))
+              ImGui::TextWrapped("%s: %s", key,
+                                 x[key].get<std::string>().c_str());
+          if (x.contains("historical_observations")) for (const auto &history : x["historical_observations"])
+            ImGui::TextWrapped("%d historical upper limit: < %.4g s; %s", history["year"].get<int>(), history["half_life_upper_limit_s"].get<double>(), history["source_url"].get<std::string>().c_str());
+          if (x.contains("theoretical_predictions")) for (const auto &prediction : x["theoretical_predictions"])
+            ImGui::TextWrapped("Theory (%s %d): Q %.4g +/- %.3g MeV, T ~ %.3g s; %s", prediction["author"].get<std::string>().c_str(), prediction["year"].get<int>(), prediction["q_mev"].get<double>(), prediction["q_uncertainty_mev"].get<double>(), prediction["half_life_s_approx"].get<double>(), prediction["source_url"].get<std::string>().c_str());
+          ImGui::TreePop();
+          }
+          if (x.value("validation_group", std::string{}) == "ren_holdout")
+            ImGui::TextWrapped("Ren holdout: excluded by the published "
+                               "half-life uncertainty criterion.");
+        } else
+          ImGui::TextWrapped(
+              "Custom channel: no catalog measurement associated.");
+      }
       ImGui::Checkbox("Single nucleus / barrier view", &barrier);
+      ImGui::PopItemWidth();
       if (barrier)
-        ImGui::TextWrapped("Blue: boundary R; gold wireframe: outer turning "
+        ImGui::TextWrapped("Blue: inner barrier boundary; gold wireframe: outer turning "
                            "radius b. Radii use the physical R/b ratio when R "
                            "< b. For R >= b there is no external barrier.");
       else

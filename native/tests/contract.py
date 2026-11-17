@@ -59,6 +59,42 @@ class Contract(unittest.TestCase):
                 proc = self.run_request(BASE | change)
                 self.assertEqual(proc.returncode, 0, proc.stderr)
 
+    def test_spherical_models_and_zero_preformation(self):
+        for model in ('square_well', 'woods_saxon'):
+            proc = self.run_request(BASE | {'potential_model': model, 'nuclear_depth_mev': 100,
+                'nuclear_radius_fm': 9, 'charge_radius_fm': 9, 'diffuseness_fm': .65})
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            result = json.loads(proc.stdout)
+            self.assertEqual(result['status'], 'ok')
+            self.assertGreater(result['outer_turning_fm'], result['inner_turning_fm'])
+            self.assertLess(result['log10_penetrability'], 0)
+            self.assertIn('external_reference', result)
+            proc = self.run_request(BASE | {'potential_model': model, 'preformation': 0})
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            result = json.loads(proc.stdout)
+            self.assertEqual(result['status'], 'zero_preformation')
+            self.assertIsNone(result['log10_half_life_s'])
+            self.assertNotIn('external_reference', result)
+        proc = self.run_request(BASE | {'potential_model': 'square_well', 'q_mev': 0})
+        self.assertEqual(json.loads(proc.stdout)['status'], 'closed_barrier')
+        for model in ('square_well', 'woods_saxon'):
+            for q in (0, .001):
+                with self.subTest(model=model, q=q):
+                    proc = self.run_request(BASE | {'potential_model': model, 'q_mev': q})
+                    self.assertEqual(proc.returncode, 0, proc.stderr)
+                    result = json.loads(proc.stdout)
+                    self.assertEqual(result['status'], 'closed_barrier' if q == 0 else 'ok')
+                    self.assertNotIn('external_reference', result)
+        proc = self.run_request(BASE | {'potential_model': 'woods_saxon', 'q_mev': 5,
+                                       'nuclear_depth_mev': 1e18})
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn('10000 MeV', json.loads(proc.stderr)['error'])
+        for change in ({'potential_model':'unknown'}, {'potential_model':'woods_saxon','diffuseness_fm':0},
+                       {'potential_model':'square_well','centrifugal_convention':'bogus'}, {'nuclear_depth_mev':100}):
+            proc = self.run_request(BASE | change)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn('error', json.loads(proc.stderr))
+
     def test_embedded_font_notice(self):
         proc = subprocess.run([EXE, '--credits'], text=True, capture_output=True)
         self.assertEqual(proc.returncode, 0, proc.stderr)
