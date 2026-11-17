@@ -77,6 +77,18 @@ class Contract(unittest.TestCase):
             self.assertNotIn('external_reference', result)
         proc = self.run_request(BASE | {'potential_model': 'square_well', 'q_mev': 0})
         self.assertEqual(json.loads(proc.stdout)['status'], 'closed_barrier')
+        for model in ('square_well', 'woods_saxon'):
+            for q in (0, .001):
+                with self.subTest(model=model, q=q):
+                    proc = self.run_request(BASE | {'potential_model': model, 'q_mev': q})
+                    self.assertEqual(proc.returncode, 0, proc.stderr)
+                    result = json.loads(proc.stdout)
+                    self.assertEqual(result['status'], 'closed_barrier' if q == 0 else 'ok')
+                    self.assertNotIn('external_reference', result)
+        proc = self.run_request(BASE | {'potential_model': 'woods_saxon', 'q_mev': 5,
+                                       'nuclear_depth_mev': 1e18})
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn('10000 MeV', json.loads(proc.stderr)['error'])
         for change in ({'potential_model':'unknown'}, {'potential_model':'woods_saxon','diffuseness_fm':0},
                        {'potential_model':'square_well','centrifugal_convention':'bogus'}, {'nuclear_depth_mev':100}):
             proc = self.run_request(BASE | change)

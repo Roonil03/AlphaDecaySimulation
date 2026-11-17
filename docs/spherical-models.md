@@ -20,6 +20,14 @@ space. Zero preformation means infinite half-life, represented as a status and
 null value. WKB, nuclear geometry, preformation and frequency all limit
 physical accuracy; numerical tolerances do not represent experimental error.
 
+The supported well-depth range is `0 < V0 <= 10000 MeV`. Greater depths are
+rejected as invalid input before topology classification because the fixed
+fine scan through `max(R_charge, R_nuclear + 40a)` is not validated for their
+extended nuclear tails. This bound describes numerical scope, not a physical
+fit. Q = 0 returns `closed_barrier`; positive Q below 0.01 MeV uses the spherical
+solver without an external/Qi/Ren comparison. The CLI and viewer share this
+calculation and reference-availability path.
+
 The Te-104 entry is separate from the 15 prior catalog entries and their
 legacy validation groups. Cox et al., [Nature 654, 52–56 (2026)](https://doi.org/10.1038/s41586-026-10581-w),
 report a direct half-life of 7.2 (+2.3, −1.5) ns. Their [preprint](https://doi.org/10.21203/rs.3.rs-7991707/v1)

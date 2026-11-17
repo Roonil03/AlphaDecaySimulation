@@ -1,5 +1,6 @@
 #include "alpha/core.hpp"
 #include "alpha/spherical_wkb.hpp"
+#include "alpha/spherical_model.hpp"
 #include "embedded.hpp"
 #include "viewer.hpp"
 #include <algorithm>
@@ -83,21 +84,8 @@ static json run_request(const json &j) {
   }
   if (model != "square_well" && model != "woods_saxon")
     throw std::invalid_argument("unknown potential_model");
-  // Reuse the legacy domain checks, but allow the alternative solver's explicit
-  // zero-energy and zero-preformation statuses.
-  if (!std::isfinite(p.q_mev) || p.q_mev < 0 || p.q_mev > 100 ||
-      !std::isfinite(p.preformation) || p.preformation < 0 || p.preformation > 1)
-    throw std::invalid_argument("input outside supported domain");
-  auto checked = p;
-  if (checked.q_mev < .01) checked.q_mev = .01;
-  if (checked.preformation == 0) checked.preformation = 1;
-  const auto reference = alpha::calculate(checked);
-  alpha::SphericalWkbRequest input;
-  auto &v = input.potential;
+  alpha::SphericalPotential v;
   v.kind = model == "square_well" ? alpha::PotentialKind::square_well : alpha::PotentialKind::woods_saxon;
-  v.daughter_z = p.parent_z - 2;
-  v.reduced_mass_mev = 931.49410242 * 4.0 * (p.parent_a - 4.0) / p.parent_a;
-  v.l = p.l;
   v.nuclear_depth_mev = j.value("nuclear_depth_mev", 100.0);
   v.nuclear_radius_fm = j.value("nuclear_radius_fm", p.radius_fm);
   v.diffuseness_fm = j.value("diffuseness_fm", .65);
@@ -105,16 +93,15 @@ static json run_request(const json &j) {
   const auto convention = j.value("centrifugal_convention", std::string("physical"));
   if (convention == "langer_wkb") v.centrifugal = alpha::CentrifugalConvention::langer_wkb;
   else if (convention != "physical") throw std::invalid_argument("unknown centrifugal_convention");
-  input.q_mev=p.q_mev; input.preformation=p.preformation; input.assault_hz=p.assault_hz;
-  auto r=alpha::calculate_spherical_wkb(input);
-  if (r.status == "invalid_input") throw std::invalid_argument(r.message);
+  auto calculation=alpha::calculate_spherical_model(p, v);
+  const auto &r=calculation.spherical;
   json out={{"schema_version",1},{"potential_model",model},{"centrifugal_convention",convention},
             {"status",r.status},{"message",r.message}};
   const auto put=[&](const char *key, const std::optional<double>& x) { out[key]=x ? json(*x) : json(nullptr); };
   put("inner_turning_fm",r.inner_turning_fm); put("outer_turning_fm",r.outer_turning_fm);
   put("action",r.action); put("log10_penetrability",r.log10_penetrability); put("log10_half_life_s",r.log10_half_life_s);
   // Only present a reference for the actual input, never a substituted status check.
-  if (p.q_mev >= .01 && p.preformation > 0) out["external_reference"] = serialize(reference);
+  if (calculation.external_reference) out["external_reference"] = serialize(*calculation.external_reference);
   return out;
 }
 static void check(bool b, const std::string &what) {

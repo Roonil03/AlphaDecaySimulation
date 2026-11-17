@@ -50,6 +50,14 @@ error and nonzero exit status. The viewer exposes the same potential parameters
 and playback uses the selected model; sources and historical limits are in the
 expandable provenance section.
 
+The spherical solver supports nuclear well depths `0 < nuclear_depth_mev <=
+10000` MeV. Larger depths are rejected before topology classification: their
+Woods-Saxon tails can extend beyond the validated nuclear-region scan. This
+numerical limit is not a fitted physical constraint. Both CLI and viewer accept
+Q = 0 and 0 < Q < 0.01 MeV for the spherical models; the external, Qi and Ren
+comparisons are unavailable there because those inputs lie outside the legacy
+model's supported energy domain.
+
 For deterministic screenshots, append an optional `external`, `square_well`,
 or `woods_saxon` argument after the preview width and height. See
 [the scientific notes](../docs/spherical-models.md) for model assumptions,

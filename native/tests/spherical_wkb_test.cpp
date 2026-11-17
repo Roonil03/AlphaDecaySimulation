@@ -1,4 +1,5 @@
 #include "alpha/spherical_wkb.hpp"
+#include "alpha/spherical_model.hpp"
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -48,6 +49,34 @@ int main() {
         request.q_mev=5; p.nuclear_depth_mev=1; p.l=0; p.centrifugal=CentrifugalConvention::physical;
         check(calculate_spherical_wkb(request).status=="no_pocket","pocketless status");
         request.q_mev=-1; check(calculate_spherical_wkb(request).status=="invalid_input","invalid energy");
+        request.q_mev=5; p.nuclear_depth_mev=1e18; p.nuclear_radius_fm=9; p.charge_radius_fm=9;
+        // This accepted-domain regression formerly skipped the barrier at 40 fm.
+        check(spherical_potential(p,35)<5 && spherical_potential(p,40)>5 && spherical_potential(p,50)<5,
+              "extreme depth repro has a real outgoing barrier");
+        result=calculate_spherical_wkb(request);
+        check(result.status=="invalid_input" && !result.log10_half_life_s && !result.action,
+              "unsupported depth must not fabricate above-barrier status");
+        p.nuclear_depth_mev=10000;
+        check(calculate_spherical_wkb(request).status=="ok","documented maximum depth remains supported");
+        // Both CLI and the viewer Calculate action use this exact entry point.
+        Request channel;
+        for (auto kind : {PotentialKind::square_well, PotentialKind::woods_saxon}) {
+            p.kind=kind; p.nuclear_depth_mev=100;
+            for (double q : {0.0, .001}) {
+                channel.q_mev=q;
+                const auto calculation=calculate_spherical_model(channel,p);
+                check(calculation.spherical.status==(q==0 ? "closed_barrier" : "ok"),
+                      "shared viewer/CLI low-energy calculation");
+                check(!calculation.external_reference,"no substituted external/Qi/Ren reference");
+                if (q==0) check(!calculation.spherical.log10_half_life_s,"zero-Q lifetime unavailable");
+            }
+            channel.q_mev=5;
+            check(calculate_spherical_model(channel,p).external_reference.has_value(),"actual reference available");
+            channel.preformation=0;
+            const auto zero=calculate_spherical_model(channel,p);
+            check(zero.spherical.status=="zero_preformation" && !zero.external_reference,"zero preformation viewer status");
+            channel.preformation=.1;
+        }
         std::cout << "spherical WKB tests passed\n";
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return EXIT_FAILURE; }
 }

@@ -39,6 +39,10 @@ SphericalWkbResult calculate_spherical_wkb(const SphericalWkbRequest& req) {
         !finite(p.nuclear_radius_fm) || p.nuclear_radius_fm <= 0 || !finite(p.charge_radius_fm) || p.charge_radius_fm <= 0 ||
         !finite(p.diffuseness_fm) || p.diffuseness_fm <= 0)
         return fail("invalid_input", "Parameters must be finite and in their physical domain.");
+    // The fixed nuclear-region scan is validated for this numerical scale.
+    // Reject larger depths before interpreting an unobserved tail as no barrier.
+    if (p.nuclear_depth_mev > 10000)
+        return fail("invalid_input", "Nuclear depth exceeds the supported maximum of 10000 MeV.");
     if (req.q_mev == 0) return fail("closed_barrier", "Zero decay energy has no finite outer Coulomb turning point.");
     const auto f=[&](double r){return spherical_potential(p,r)-req.q_mev;};
     // Fine scan through the nuclear region, then exponentially spaced exterior samples.
