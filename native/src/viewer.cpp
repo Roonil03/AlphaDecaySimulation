@@ -615,7 +615,8 @@ int viewer(int argc, char **argv) {
           if(n.wkb_difference_decades) ImGui::Text("Numerov minus WKB: %.5g decades",*n.wkb_difference_decades);
           if(convention==1) ImGui::TextWrapped("Comparison uses different centrifugal terms: Numerov physical, WKB Langer.");
           if(n.log10_half_life_s) ImGui::Text("Numerov log10 half-life: %.8g",*n.log10_half_life_s);
-          ImGui::Text("Parameter draws: %zu accepted, %zu rejected",u.accepted,u.rejected);
+          ImGui::Text("Finite-rate draws: %zu retained; %zu excluded (%.1f%%)",u.accepted,u.rejected,100*u.rejection_fraction);
+          ImGui::Text("Excluded: %zu closed, %zu zero rate, %zu invalid, %zu numerical, %zu unsupported",u.closed,u.zero_rate,u.invalid,u.numerical_failure,u.unsupported);
           if(u.log10_half_life_p50) ImGui::Text("log10 half-life p16 / p50 / p84: %.4g / %.4g / %.4g",*u.log10_half_life_p16,*u.log10_half_life_p50,*u.log10_half_life_p84);
           ImGui::TextWrapped("%s",u.message.c_str());
           ImGui::TextWrapped("Spherical ground-state comparison; deformed channel transmission is not included.");
@@ -778,6 +779,7 @@ int viewer(int argc, char **argv) {
   glfwTerminate();
   return 0;
 }
+
 
 
 

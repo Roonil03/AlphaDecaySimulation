@@ -18,10 +18,12 @@ struct UncertaintyRequest {
 };
 struct UncertaintyResult {
     std::string status, message;
-    std::size_t accepted = 0, rejected = 0;
+    std::size_t accepted = 0, rejected = 0, closed = 0, zero_rate = 0, invalid = 0, numerical_failure = 0, unsupported = 0;
+    double rejection_fraction = 0;
     std::optional<double> log10_half_life_p16, log10_half_life_p50, log10_half_life_p84;
     bool assumed_independent = false;
 };
 UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest&, const std::function<bool()>& cancelled = {});
 }
+
 

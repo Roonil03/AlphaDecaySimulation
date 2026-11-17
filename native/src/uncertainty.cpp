@@ -28,13 +28,17 @@ UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest& r, cons
         std::array<double,4> z{}, d{}; for (auto& v:z) v=normal(rng);
         for (int i=0;i<4;++i) for (int j=0;j<=i;++j) d[i]+=L[4*i+j]*z[j];
         auto p=r.baseline; p.q_mev+=d[0]; p.potential.nuclear_depth_mev+=d[1]; p.potential.nuclear_radius_fm+=d[2]; p.potential.diffuseness_fm+=d[3];
-        auto x=calculate_spherical_wkb(p); if(x.status=="ok" && x.log10_half_life_s && std::isfinite(*x.log10_half_life_s)) values.push_back(*x.log10_half_life_s); else ++out.rejected;
+        if (p.q_mev<=0) {++out.closed; ++out.rejected; continue;}
+        auto x=calculate_spherical_wkb(p);
+        if(x.status=="ok" && x.log10_half_life_s && std::isfinite(*x.log10_half_life_s)) values.push_back(*x.log10_half_life_s);
+        else {++out.rejected; if(x.status=="closed_barrier") ++out.closed; else if(x.status=="zero_preformation") ++out.zero_rate; else if(x.status=="invalid_input") ++out.invalid; else if(x.status=="numerical_error") ++out.numerical_failure; else ++out.unsupported;}
     }
-    out.accepted=values.size(); if(values.empty()) {out.status="no_valid_draws"; out.message="All parameter draws were rejected"; return out;}
+    out.accepted=values.size(); out.rejection_fraction=static_cast<double>(out.rejected)/r.draws; if(values.empty()) {out.status="no_valid_draws"; out.message="All parameter draws were rejected"; return out;}
     std::sort(values.begin(),values.end()); auto quantile=[&](double q) {double pos=q*(values.size()-1); auto lo=static_cast<std::size_t>(pos); auto hi=std::min(lo+1,values.size()-1); return values[lo]+(pos-lo)*(values[hi]-values[lo]);};
     out.log10_half_life_p16=quantile(.16); out.log10_half_life_p50=quantile(.5); out.log10_half_life_p84=quantile(.84); out.status="ok";
-    out.message=out.assumed_independent ? "Input covariance absent: parameters assumed independent; model and numerical errors are separate" : "Parameter spread only; model and numerical errors are separate"; return out;
+    out.message=out.assumed_independent ? "Quantiles conditional on retained finite-rate draws; covariance absent, parameters assumed independent; model and numerical errors are separate" : "Quantiles conditional on retained finite-rate draws; model and numerical errors are separate"; return out;
 }
 }
+
 
 

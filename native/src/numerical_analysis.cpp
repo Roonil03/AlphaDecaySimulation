@@ -40,7 +40,8 @@ void append_numerical_analyses(const json& j,const alpha::SphericalWkbRequest& i
         if(u.contains("covariance")) { const auto& a=u.at("covariance"); if(!a.is_array()||a.size()!=4) throw std::invalid_argument("covariance must be a 4x4 array"); std::array<double,16> c{}; for(int i=0;i<4;++i) {if(!a[i].is_array()||a[i].size()!=4) throw std::invalid_argument("covariance must be a 4x4 array"); for(int k=0;k<4;++k) c[i*4+k]=a[i][k].get<double>();} r.covariance=c; }
         auto x=alpha::sample_spherical_uncertainty(r);
         if(x.status=="invalid") throw std::invalid_argument(x.message);
-        out["uncertainty"]={{"status",x.status},{"message",x.message},{"seed",r.seed},{"sample_count",r.draws},{"accepted",x.accepted},{"rejected",x.rejected},{"assumed_independent",x.assumed_independent},{"log10_half_life_p16",number(x.log10_half_life_p16)},{"log10_half_life_p50",number(x.log10_half_life_p50)},{"log10_half_life_p84",number(x.log10_half_life_p84)}};
+        out["uncertainty"]={{"status",x.status},{"message",x.message},{"seed",r.seed},{"sample_count",r.draws},{"accepted",x.accepted},{"rejected",x.rejected},{"rejection_fraction",x.rejection_fraction},{"closed",x.closed},{"zero_rate",x.zero_rate},{"invalid",x.invalid},{"numerical_failure",x.numerical_failure},{"unsupported",x.unsupported},{"assumed_independent",x.assumed_independent},{"log10_half_life_p16",number(x.log10_half_life_p16)},{"log10_half_life_p50",number(x.log10_half_life_p50)},{"log10_half_life_p84",number(x.log10_half_life_p84)}};
     }
 }
+
 

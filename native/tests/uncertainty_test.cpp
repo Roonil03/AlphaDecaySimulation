@@ -9,6 +9,10 @@ int main() {
     std::array<double,16> bad{}; bad[0]=-1; r.covariance=bad; check(alpha::sample_spherical_uncertainty(r).status=="invalid");
     bad[0]=-1e-15; r.covariance=bad; check(alpha::sample_spherical_uncertainty(r).status=="invalid");
     r.covariance=std::array<double,16>{}; auto c=alpha::sample_spherical_uncertainty(r); check(c.status=="ok" && !c.assumed_independent && c.log10_half_life_p16==c.log10_half_life_p84);
+    r.covariance.reset(); r.standard_deviations[0]=20; r.draws=100; auto mixed=alpha::sample_spherical_uncertainty(r);
+    check(mixed.closed>0 && mixed.rejected==mixed.closed+mixed.zero_rate+mixed.invalid+mixed.numerical_failure+mixed.unsupported);
+    check(mixed.rejection_fraction==static_cast<double>(mixed.rejected)/r.draws);
 }
+
 
 
