@@ -28,10 +28,12 @@ double deformed_coulomb(const SphericalPotential& p,Deformation d,double r,doubl
 }
 }
 namespace alpha {
-DeformedWkbResult calculate_deformed_wkb(const SphericalWkbRequest& req, Deformation d) {
+DeformedWkbResult calculate_deformed_wkb(const SphericalWkbRequest& req, Deformation d, const std::function<bool()>& cancelled) {
  DeformedWkbResult out;
  try {
   validate(d);
+  auto check_cancel=[&](){if(cancelled && cancelled()) throw std::runtime_error("cancelled");};
+  check_cancel();
   if(d.beta2==0&&d.beta4==0) { auto s=calculate_spherical_wkb(req); out.status=s.status; out.message=s.message; out.log10_penetrability=s.log10_penetrability; out.log10_half_life_s=s.log10_half_life_s; out.angular_points=1; return out; }
   // Compare independent multipole truncations at several physically relevant points.
   for(double x: {0.0,0.5,1.0}) for(double r: {req.potential.charge_radius_fm,1.5*req.potential.charge_radius_fm,3*req.potential.charge_radius_fm}) out.coulomb_error_mev=std::max(out.coulomb_error_mev,std::abs(deformed_coulomb(req.potential,d,r,x,24,256)-deformed_coulomb(req.potential,d,r,x,32,512)));
@@ -47,7 +49,7 @@ DeformedWkbResult calculate_deformed_wkb(const SphericalWkbRequest& req, Deforma
     std::vector<double> source(nq); std::vector<Row> polys(nq);
     for(int i=0;i<nq;i++){double u=(i+0.5)/nq;source[i]=R*raw(d,u)/norm;for(int k=0;k<=order/2;k++) polys[i][k]=legendre(2*k,u);}
     Table t{dr,order,std::vector<Row>(count+1)};
-    for(int j=0;j<=count;j++){double r=std::max(j*dr,1e-8);for(int i=0;i<nq;i++){double a=source[i], z=std::min(a,r);for(int k=0;k<=order/2;k++){int l=2*k;double v=std::pow(z/r,l+1)*z*z/(l+3);if(a>r) v+=l==2?r*r*std::log(a/r):r*r*(std::pow(a/r,2-l)-1)/(2-l);t.rows[j][k]+=polys[i][k]*v/nq;}}}
+    for(int j=0;j<=count;j++){check_cancel();double r=std::max(j*dr,1e-8);for(int i=0;i<nq;i++){double a=source[i], z=std::min(a,r);for(int k=0;k<=order/2;k++){int l=2*k;double v=std::pow(z/r,l+1)*z*z/(l+3);if(a>r) v+=l==2?r*r*std::log(a/r):r*r*(std::pow(a/r,2-l)-1)/(2-l);t.rows[j][k]+=polys[i][k]*v/nq;}}}
     return t;
   };
   auto coarse=build(24,256,0.02), fine=build(32,512,0.01);
@@ -57,6 +59,7 @@ DeformedWkbResult calculate_deformed_wkb(const SphericalWkbRequest& req, Deforma
    const int count=static_cast<int>(table.rows.size())-1; const double dr=table.dr;
    double maxlog=-INFINITY, sum=0;
    for(int i=0;i<n;i++) {
+    check_cancel();
     // Gauss-Legendre nodes on [0,1].
     double z=std::cos(pi*(i+0.75)/(n+0.5)), last, deriv=0;
     do { double p0=1,p1=z; for(int k=2;k<=n;k++){double p=((2*k-1)*z*p1-(k-1)*p0)/k;p0=p1;p1=p;} deriv=n*(z*p1-p0)/(z*z-1); last=z; z=last-p1/deriv; } while(std::abs(z-last)>1e-14);
@@ -82,7 +85,7 @@ DeformedWkbResult calculate_deformed_wkb(const SphericalWkbRequest& req, Deforma
   out.log10_penetrability=value; out.status=req.preformation==0?"zero_preformation":"ok";
   if(req.preformation>0) out.log10_half_life_s=std::log10(std::log(2.0))-std::log10(req.assault_hz)-std::log10(req.preformation)-value;
   return out;
- } catch(const std::exception& e) { out.status="invalid_or_numerical_error"; out.message=e.what(); return out; }
+ } catch(const std::exception& e) { out.status=std::string(e.what())=="cancelled"?"cancelled":"invalid_or_numerical_error"; out.message=e.what(); return out; }
 }
 }
 

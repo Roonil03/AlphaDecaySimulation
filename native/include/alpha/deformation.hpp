@@ -11,5 +11,5 @@ struct DeformedWkbResult {
 // Throws invalid_argument outside the supported positive, bounded shape domain.
 double deformed_radius(double volume_radius_fm, Deformation, double cos_theta);
 double deformed_coulomb(const SphericalPotential&, Deformation, double radius_fm, double cos_theta, int order=16, int quadrature=128);
-DeformedWkbResult calculate_deformed_wkb(const SphericalWkbRequest&, Deformation);
+DeformedWkbResult calculate_deformed_wkb(const SphericalWkbRequest&, Deformation, const std::function<bool()>& cancelled = {});
 }

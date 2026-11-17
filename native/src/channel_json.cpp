@@ -17,7 +17,7 @@ int exact_int(const json& v) {
 std::optional<alpha::SpinParity> spin(const json& j) { if(j.is_null())return {}; keys(j,{"twice_j","parity"}); return alpha::SpinParity{exact_int(j.at("twice_j")),exact_int(j.at("parity"))}; }
 json opt(const std::optional<double>& v) { return v ? json(*v) : json(nullptr); }
 }
-json run_channels(const json& input,const alpha::SphericalWkbRequest& base) {
+json run_channels(const json& input,const alpha::SphericalWkbRequest& base, const std::function<bool()>& cancelled) {
  alpha::Deformation d;
  if(input.contains("deformation")) { const auto& x=input.at("deformation"); keys(x,{"beta2","beta4"}); d.beta2=x.value("beta2",0.0); d.beta4=x.value("beta4",0.0); }
  (void)alpha::deformed_radius(1,d,0);
@@ -26,13 +26,14 @@ json run_channels(const json& input,const alpha::SphericalWkbRequest& base) {
  if(!input.contains("channels")||!input.at("channels").is_array()||input.at("channels").empty()) throw std::invalid_argument("channels must be a nonempty array");
  std::vector<alpha::ChannelInput> cs; std::vector<alpha::ChannelSelection> selections; std::vector<std::optional<double>> logs; json rows=json::array();
  for(const auto& x:input.at("channels")) {
+  if(cancelled && cancelled()) throw std::runtime_error("cancelled");
   keys(x,{"name","excitation_mev","daughter_spin","l","preformation","assault_hz"});
   alpha::ChannelInput c; c.name=x.value("name",std::string()); c.excitation_mev=x.value("excitation_mev",0.0); c.preformation=x.value("preformation",base.preformation); c.assault_hz=x.value("assault_hz",base.assault_hz);
   if(x.contains("daughter_spin")) c.daughter=spin(x.at("daughter_spin")); if(x.contains("l")&&!x.at("l").is_null()) { c.l=exact_int(x.at("l")); }
   auto selection=alpha::select_channel(base.q_mev,parent,c); json row={{"name",c.name},{"q_mev",selection.q_mev},{"l",selection.l?json(*selection.l):json(nullptr)}}; std::optional<double> logp;
   if(selection.status=="ok") {
    auto req=base; req.q_mev=selection.q_mev; req.potential.l=*selection.l; req.preformation=c.preformation; req.assault_hz=c.assault_hz;
-   auto r=alpha::calculate_deformed_wkb(req,d); row["barrier_status"]=r.status; row["barrier_message"]=r.message; row["angular_error_log10"]=r.angular_error_log10; row["charge_error_log10"]=r.charge_error_log10; row["coulomb_error_mev"]=r.coulomb_error_mev; row["angular_points"]=r.angular_points; row["multipole_order"]=r.multipole_order;
+   auto r=alpha::calculate_deformed_wkb(req,d,cancelled); if(r.status=="cancelled") throw std::runtime_error("cancelled"); row["barrier_status"]=r.status; row["barrier_message"]=r.message; row["angular_error_log10"]=r.angular_error_log10; row["charge_error_log10"]=r.charge_error_log10; row["coulomb_error_mev"]=r.coulomb_error_mev; row["angular_points"]=r.angular_points; row["multipole_order"]=r.multipole_order;
    logp=r.log10_penetrability; if(!logp) selection.status=r.status;
   }
   row["log10_penetrability"]=opt(logp); rows.push_back(row); cs.push_back(c); selections.push_back(selection); logs.push_back(logp);

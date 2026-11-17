@@ -4,4 +4,4 @@
 // Input fields: deformation {beta2,beta4}, parent_spin {twice_j,parity},
 // channels [{name,excitation_mev,daughter_spin,l,preformation,assault_hz}],
 // and optional competing_rate_hz. Base has the selected potential and Q.
-nlohmann::json run_channels(const nlohmann::json& input, const alpha::SphericalWkbRequest& base);
+nlohmann::json run_channels(const nlohmann::json& input, const alpha::SphericalWkbRequest& base, const std::function<bool()>& cancelled = {});
