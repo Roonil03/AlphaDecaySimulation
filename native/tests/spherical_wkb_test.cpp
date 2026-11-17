@@ -21,6 +21,15 @@ int main() {
         near(*result.inner_turning_fm,9,1e-12,"square discontinuity is barrier boundary");
         near(*result.outer_turning_fm,b,b*1e-10,"outer Coulomb turning point");
         near(*result.log10_penetrability,-2*expected/std::log(10.0),1e-7,"analytic Coulomb penetrability");
+        for (double q : {0.01, 25.0}) {
+            request.q_mev=q;
+            result=calculate_spherical_wkb(request);
+            check(result.status=="ok", "extreme Coulomb barrier");
+            const double outer=k/q, ratio=p.nuclear_radius_fm/outer;
+            const double action=std::sqrt(2*p.reduced_mass_mev)/197.3269804*k/std::sqrt(q)*(std::acos(std::sqrt(ratio))-std::sqrt(ratio*(1-ratio)));
+            near(*result.log10_penetrability,-2*action/std::log(10.0),1e-5,"extreme analytic Coulomb penetrability");
+        }
+        request.q_mev=5;
         request.preformation=0; result=calculate_spherical_wkb(request);
         check(result.status=="zero_preformation" && !result.log10_half_life_s && result.log10_penetrability,"zero preformation status");
         request.preformation=.1; request.q_mev=1000; result=calculate_spherical_wkb(request);
@@ -36,6 +45,8 @@ int main() {
         result=calculate_spherical_wkb(request);
         check(result.status=="ok", "centrifugal inner boundary retains outgoing pocket");
         request.q_mev=0; check(calculate_spherical_wkb(request).status=="closed_barrier","zero-energy closed barrier");
+        request.q_mev=5; p.nuclear_depth_mev=1; p.l=0; p.centrifugal=CentrifugalConvention::physical;
+        check(calculate_spherical_wkb(request).status=="no_pocket","pocketless status");
         request.q_mev=-1; check(calculate_spherical_wkb(request).status=="invalid_input","invalid energy");
         std::cout << "spherical WKB tests passed\n";
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return EXIT_FAILURE; }
