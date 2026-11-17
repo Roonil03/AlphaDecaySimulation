@@ -91,3 +91,24 @@ pub unsafe extern "C" fn alpha_numerov_solve(request:*const Request, output:*mut
     let r=std::panic::catch_unwind(|| calculate(&*request)).unwrap_or_else(|_|result(3,"Internal numerical failure"));
     output.write(r); 0
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn fixture()->Request { Request {version:1,kind:0,l:0,reserved:0,daughter_z:0.0,reduced_mass_mev:3657.0,q_mev:5.0,depth_mev:0.0,radius_fm:7.0,diffuseness_fm:0.65,charge_radius_fm:7.0,lead_radius_fm:2.0,match_radius_fm:20.0,step_fm:0.01} }
+    #[test] fn free_particle_transmission() { let p=fixture(); let r=calculate(&p); assert_eq!(r.status,0); assert!(r.log10_transmission.abs()<1e-5); }
+    #[test] fn analytic_potential_step() {
+        let mut p=fixture(); p.depth_mev=10.0;
+        let t=solve_once(&p,0.00005,20.0).unwrap();
+        let k=p.q_mev.sqrt(); let ki=(p.q_mev+p.depth_mev).sqrt();
+        let exact=(4.0*k*ki/(k+ki).powi(2)).log10();
+        assert!((t-exact).abs()<1e-5,"{t} versus {exact}");
+    }
+    #[test] fn invalid_inputs_and_null_pointers() {
+        let mut p=fixture(); p.q_mev=-1.0; assert_eq!(calculate(&p).status,2);
+        let mut out=result(0,""); unsafe { assert_eq!(alpha_numerov_solve(std::ptr::null(),&mut out),-1); assert_eq!(alpha_numerov_solve(&p,std::ptr::null_mut()),-1); assert_eq!(alpha_numerov_solve(&p,&mut out),0); } assert_eq!(out.status,2);
+    }
+    #[test] fn coulomb_solution_checks_exterior() {
+        let mut p=fixture(); p.daughter_z=50.0; p.depth_mev=100.0; p.lead_radius_fm=5.0; p.match_radius_fm=500.0; p.step_fm=0.02;
+        let r=calculate(&p); assert!(r.status<=1,"{}",String::from_utf8_lossy(&r.message)); assert!(r.match_error_decades<1e-4,"{}",r.match_error_decades);
+    }
+}
