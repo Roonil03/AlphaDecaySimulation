@@ -1,0 +1,13 @@
+// Astro 0.1.15a design sketch: enumerate a simple integer mass grid.
+// This illustrates syntax only; it is not executed by the campaign tools.
+fun mass_at(first, offset) {
+    return first + offset;
+}
+
+fun mass_sum(first, count) {
+    var sum = 0;
+    for (var i = 0; i < count; ++i) {
+        sum += mass_at(first, i);
+    }
+    return sum;
+}

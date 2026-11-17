@@ -1,0 +1,6 @@
+{
+  "cases": [
+    {"id":"po212", "request":{"schema_version":1,"parent_z":84,"parent_a":212,"q_mev":8.9542,"l":0,"radius_fm":9.0,"preformation":0.1,"assault_hz":1e21}},
+    {"id":"po210", "request":{"schema_version":1,"parent_z":84,"parent_a":210,"q_mev":5.4075,"l":0,"radius_fm":9.0,"preformation":0.1,"assault_hz":1e21}}
+  ]
+}
