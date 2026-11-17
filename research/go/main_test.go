@@ -21,6 +21,10 @@ func TestMain(m *testing.M) {
 		if req["sleep"] == true {
 			time.Sleep(5 * time.Second)
 		}
+		if req["domain"] == true {
+			os.Stderr.WriteString(`{"schema_version":1,"error":"invalid request"}`)
+			os.Exit(1)
+		}
 		if req["fail"] == true {
 			os.Stderr.WriteString("bad request")
 			os.Exit(4)
@@ -62,5 +66,13 @@ func TestOutputLimit(t *testing.T) {
 	got := run(context.Background(), exe, Case{"large", json.RawMessage(`{"large":true}`)}, 10*time.Second)
 	if got.Error == "" || len(got.Response) != 0 {
 		t.Fatalf("unbounded output: %+v", got)
+	}
+}
+
+func TestDomainRejection(t *testing.T) {
+	exe, _ := os.Executable()
+	got := run(context.Background(), exe, Case{"bad", json.RawMessage(`{"domain":true}`)}, 10*time.Second)
+	if got.ErrorKind != "domain" {
+		t.Fatalf("unexpected result: %+v", got)
 	}
 }

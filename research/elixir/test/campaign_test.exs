@@ -43,7 +43,28 @@ defmodule CampaignTest do
     assert Jason.decode!(File.read!(Path.join([dir, "attempts", "one.json"]))) == %{"count" => 2}
     assert File.exists?(Path.join([dir, "results", "one.json"]))
   end
+  test "domain rejection is terminal and persists across restart" do
+    dir = Path.join(System.tmp_dir!(), "reject-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf!(dir) end)
+    manifest = Path.join(dir, "manifest.json")
+    File.write!(manifest, Jason.encode!(%{cases: [%{id: "one", request: %{}}]}))
+    scheduler = Path.join(dir, "scheduler")
+    File.write!(scheduler, "#!/bin/sh\nprintf '[{\"id\":\"one\",\"error\":\"bad input\",\"error_kind\":\"domain\"}]'\n")
+    File.chmod!(scheduler, 0o755)
+    {:ok, pid} = Campaign.start_link(dir: dir, manifest: manifest, scheduler: scheduler, core: "unused")
+    Process.unlink(pid)
+    ref = Process.monitor(pid)
+    assert_receive {:DOWN, ^ref, :process, ^pid, {:domain_rejection, "one"}}, 5000
+    assert File.exists?(Path.join([dir, "attempts", "one.rejected"]))
+    {:ok, second} = Campaign.start_link(dir: dir, manifest: manifest, scheduler: scheduler, core: "unused")
+    Process.unlink(second)
+    ref2 = Process.monitor(second)
+    assert_receive {:DOWN, ^ref2, :process, ^second, {:attempts_exhausted, "one"}}, 5000
+    assert Jason.decode!(File.read!(Path.join([dir, "attempts", "one.json"]))) == %{"count" => 1}
+  end
 end
+
 
 
 
