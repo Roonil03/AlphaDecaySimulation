@@ -1,3 +1,5 @@
+**Native migration:** The C++20 offline application and its build/CLI instructions are in [native/README.md](native/README.md). The service and older desktop documentation below remains available during migration.
+
 # Alpha-decay observatory
 
 A reproducible alpha-decay demonstration connecting a barrier calculation, published empirical estimates and a seeded population simulation. The default is Po-212. The offline catalog includes 13 legacy comparison channels and two separately reported Ren half-life-fit holdouts, Dy-154 and Os-186, plus support for custom nuclei.
@@ -42,5 +44,6 @@ Total parent binding energies are AME2020 binding energy per nucleon multiplied 
 The research estimate uses the alpha-only universal decay law of [Qi et al.](https://doi.org/10.1103/PhysRevLett.103.072501), fitted to 139 even-even alpha transitions with Z=78–108. Sm (Z=62) and custom values outside that range are extrapolations. The shell estimate implements [Ren et al. (2026)](https://cpc.ihep.ac.cn/article/doi/10.1088/1674-1137/ae167b), a global fit to 550 alpha decays across even-even, even-odd, odd-even and odd-odd cases, including 190 even-even l=0 cases, using measured binding energies. Both are empirical, and their original fitting data may overlap these catalog nuclei: this comparison is not an independent out-of-sample validation. No coefficients are fitted by this project. Neither estimate is available for odd parent Z or A, or nonzero l. The simplified WKB baseline omits nuclear structure, deformation and uncertainty; models can be worse for individual nuclei even when aggregate errors improve.
 
 Compose builds kernel, ensemble and gateway services. The gateway exposes `POST /v1/barrier` and `POST /v1/ensemble`; each service has `GET /health`. See [services documentation](services/README.md) for contracts and domain limits. The desktop visualization is illustrative, not a new decay theory or first simulation.
+
 
 
