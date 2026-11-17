@@ -27,7 +27,7 @@ fn potential(p:&Request,r:f64)->f64 {
 }
 fn valid(p:&Request)->bool {
     let a=[p.daughter_z,p.reduced_mass_mev,p.q_mev,p.depth_mev,p.radius_fm,p.diffuseness_fm,p.charge_radius_fm,p.lead_radius_fm,p.match_radius_fm,p.step_fm];
-    p.version==1 && p.reserved==0 && p.kind<=1 && (0..=100).contains(&p.l) && a.iter().all(|x|x.is_finite()) && p.daughter_z>=0.0 && p.reduced_mass_mev>0.0 && p.q_mev>0.0 && p.depth_mev>=0.0 && p.radius_fm>0.0 && p.diffuseness_fm>0.0 && p.charge_radius_fm>0.0 && p.lead_radius_fm>0.0 && p.match_radius_fm>p.lead_radius_fm && p.step_fm>0.0 && p.q_mev>potential(p,p.lead_radius_fm)
+    p.version==1 && p.reserved==0 && p.kind<=1 && (0..=100).contains(&p.l) && a.iter().all(|x|x.is_finite()) && p.daughter_z>=0.0 && p.daughter_z<=130.0 && (1.0..=1e6).contains(&p.reduced_mass_mev) && p.q_mev>0.0 && p.q_mev<=1000.0 && (0.0..=1e5).contains(&p.depth_mev) && (1e-3..=1e4).contains(&p.radius_fm) && (1e-4..=1e4).contains(&p.diffuseness_fm) && (1e-3..=1e4).contains(&p.charge_radius_fm) && p.lead_radius_fm>=1e-3 && p.match_radius_fm>p.lead_radius_fm && p.match_radius_fm<=1e5 && p.step_fm>=1e-5 && p.step_fm<=100.0 && p.q_mev>potential(p,p.lead_radius_fm)
 }
 // DLMF 33.11 outgoing H+: expand exp(i(rho-eta log(2rho))) in inverse rho.
 // Truncate at the least term, rejecting points outside its asymptotic regime.
@@ -145,6 +145,7 @@ mod tests {
         let r=calculate(&p); assert!(r.status<=1,"{}",String::from_utf8_lossy(&r.message)); assert!(r.match_error_decades<1e-4,"{}",r.match_error_decades);
     }
 }
+
 
 
 

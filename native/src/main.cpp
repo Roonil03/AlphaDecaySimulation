@@ -2,6 +2,7 @@
 #include "alpha/spherical_wkb.hpp"
 #include "embedded.hpp"
 #include "viewer.hpp"
+#include "numerical_analysis.hpp"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -41,7 +42,7 @@ static alpha::Request parse(const json &j) {
                                          "parent_binding_mev", "potential_model",
                                          "nuclear_depth_mev", "nuclear_radius_fm",
                                          "diffuseness_fm", "charge_radius_fm",
-                                         "centrifugal_convention"};
+                                         "centrifugal_convention", "numerov", "uncertainty"};
   if (!j.is_object())
     throw std::invalid_argument("request must be an object");
   for (auto it = j.begin(); it != j.end(); ++it)
@@ -77,6 +78,7 @@ static json run_request(const json &j) {
   auto p = parse(j);
   const auto model = j.value("potential_model", std::string("external"));
   if (model == "external") {
+    if (j.contains("numerov") || j.contains("uncertainty")) throw std::invalid_argument("numerical analyses require a spherical potential model");
     for (const char *key : {"nuclear_depth_mev", "nuclear_radius_fm", "diffuseness_fm", "charge_radius_fm", "centrifugal_convention"})
       if (j.contains(key)) throw std::invalid_argument(std::string(key) + " requires a spherical potential model");
     return serialize(alpha::calculate(p));
@@ -115,6 +117,7 @@ static json run_request(const json &j) {
   put("action",r.action); put("log10_penetrability",r.log10_penetrability); put("log10_half_life_s",r.log10_half_life_s);
   // Only present a reference for the actual input, never a substituted status check.
   if (p.q_mev >= .01 && p.preformation > 0) out["external_reference"] = serialize(reference);
+  append_numerical_analyses(j,input,out);
   return out;
 }
 static void check(bool b, const std::string &what) {
@@ -202,3 +205,5 @@ int main(int argc, char **argv) {
     return 1;
   }
 }
+
+

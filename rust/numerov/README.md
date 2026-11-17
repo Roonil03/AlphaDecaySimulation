@@ -6,3 +6,5 @@ The outgoing wave uses the inverse-radius asymptotic expansion (DLMF 33.11); it 
 
 The native uncertainty sampler propagates the supplied Gaussian covariance, or treats supplied standard deviations as independent when covariance is absent and marks that assumption. It reports accepted draws and log-half-life quantiles; rejected draws can bias the conditional distribution. Its output covers the supplied parameter spread only; it does not infer experimental uncertainties or include numerical and model uncertainty.
 
+
+To bound runtime, the Rust ABI accepts 0–130 daughter charge, reduced mass 1–10^6 MeV/c², Q in (0,1000] MeV, depth 0–10^5 MeV, radii 0.001–10,000 fm for nuclear and charge radii, diffuseness 0.0001–10,000 fm, positive lead radius at least 0.001 fm, match radius at most 100,000 fm, and step 0.00001–100 fm; each pass has a five-million grid-point limit. Values outside these numerical bounds are explicitly refused. A cancellation callback is checked periodically; keep it asserted until the call returns.

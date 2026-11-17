@@ -1,6 +1,13 @@
 #include "viewer.hpp"
 #include "alpha/core.hpp"
 #include "alpha/spherical_wkb.hpp"
+#include "alpha/uncertainty.hpp"
+#ifdef ALPHA_ENABLE_NUMEROV
+#include "alpha/numerov.hpp"
+#include <future>
+#include <memory>
+#include <chrono>
+#endif
 #include "embedded.hpp"
 #include <glad/gl.h>
 #include <imgui.h>
@@ -293,6 +300,17 @@ int viewer(int argc, char **argv) {
     int model = 0, potential_model = 0, convention = 0;
     double depth = 100, nuclear_radius = 9, diffuseness = .65, charge_radius = 9;
     alpha::SphericalWkbResult alternative;
+#ifdef ALPHA_ENABLE_NUMEROV
+    struct Analysis { alpha::NumerovResult numerov; alpha::UncertaintyResult uncertainty; };
+    std::future<Analysis> analysis_job;
+    auto analysis_cancel=std::make_shared<std::atomic_bool>(false);
+    std::optional<Analysis> analysis_result;
+    alpha::NumerovOptions numerical_options;
+    std::array<double,4> sigma{};
+    std::array<double,16> covariance{}; bool use_covariance=false;
+    int analysis_seed=1, analysis_draws=100;
+    bool discard_analysis=false;
+#endif
     std::string error;
     std::mt19937 rng(42);
     std::uniform_real_distribution<float> u(0, 1);
@@ -304,6 +322,9 @@ int viewer(int argc, char **argv) {
           {r * xy * std::cos(phi), r * z, r * xy * std::sin(phi), u(rng)});
     }
     auto select = [&] {
+#ifdef ALPHA_ENABLE_NUMEROV
+      analysis_cancel->store(true); discard_analysis=true; analysis_result.reset();
+#endif
       auto &x = catalog[selected];
       request.parent_z = x["z"];
       request.parent_a = x["a"];
@@ -315,21 +336,23 @@ int viewer(int argc, char **argv) {
       playing = false;
       elapsed = 0;
     };
+    auto make_spherical = [&] {
+      alpha::SphericalWkbRequest input;
+      input.q_mev=request.q_mev; input.preformation=request.preformation; input.assault_hz=request.assault_hz;
+      auto &v=input.potential;
+      v.kind=potential_model == 1 ? alpha::PotentialKind::square_well : alpha::PotentialKind::woods_saxon;
+      v.daughter_z=request.parent_z-2; v.reduced_mass_mev=931.49410242 * 4.0 * (request.parent_a-4.0) / request.parent_a;
+      v.l=request.l; v.nuclear_depth_mev=depth; v.nuclear_radius_fm=nuclear_radius; v.diffuseness_fm=diffuseness; v.charge_radius_fm=charge_radius;
+      v.centrifugal=convention == 0 ? alpha::CentrifugalConvention::physical : alpha::CentrifugalConvention::langer_wkb;
+      return input;
+    };
     auto calculate = [&] {
       try {
         auto checked = request;
         if (potential_model && checked.preformation == 0) checked.preformation = 1;
         result = alpha::calculate(checked);
         if (potential_model) {
-          alpha::SphericalWkbRequest input;
-          input.q_mev=request.q_mev; input.preformation=request.preformation; input.assault_hz=request.assault_hz;
-          auto &v=input.potential;
-          v.kind=potential_model == 1 ? alpha::PotentialKind::square_well : alpha::PotentialKind::woods_saxon;
-          v.daughter_z=request.parent_z-2;
-          v.reduced_mass_mev=931.49410242 * 4.0 * (request.parent_a-4.0) / request.parent_a;
-          v.l=request.l; v.nuclear_depth_mev=depth; v.nuclear_radius_fm=nuclear_radius;
-          v.diffuseness_fm=diffuseness; v.charge_radius_fm=charge_radius;
-          v.centrifugal=convention == 0 ? alpha::CentrifugalConvention::physical : alpha::CentrifugalConvention::langer_wkb;
+          auto input=make_spherical();
           alternative=alpha::calculate_spherical_wkb(input);
           if (alternative.status == "invalid_input") throw std::invalid_argument(alternative.message);
         }
@@ -437,6 +460,9 @@ int viewer(int argc, char **argv) {
         changed = true;
       }
       if (changed) {
+#ifdef ALPHA_ENABLE_NUMEROV
+        analysis_cancel->store(true); discard_analysis=true; analysis_result.reset();
+#endif
         valid = false;
         playing = false;
         error.clear();
@@ -447,6 +473,59 @@ int viewer(int argc, char **argv) {
       if (!error.empty())
         ImGui::TextWrapped("%s", error.c_str());
       ImGui::Separator();
+#ifdef ALPHA_ENABLE_NUMEROV
+      if (analysis_job.valid() && analysis_job.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
+        try { auto finished=analysis_job.get(); if (!discard_analysis) analysis_result=std::move(finished); }
+        catch (const std::exception& e) { error=e.what(); }
+      }
+      if (potential_model && ImGui::TreeNode("Numerov and parameter uncertainty")) {
+        bool options_changed=false;
+        options_changed |= ImGui::InputDouble("Inner lead radius (fm)",&numerical_options.lead_radius_fm,0,0,"%.5g");
+        options_changed |= ImGui::InputDouble("Exterior match radius (fm)",&numerical_options.match_radius_fm,0,0,"%.5g");
+        options_changed |= ImGui::InputDouble("Numerov step (fm)",&numerical_options.step_fm,0,0,"%.5g");
+        options_changed |= ImGui::InputDouble("Q standard deviation (MeV)",&sigma[0],0,0,"%.5g");
+        options_changed |= ImGui::InputDouble("Depth standard deviation (MeV)",&sigma[1],0,0,"%.5g");
+        options_changed |= ImGui::InputDouble("Radius standard deviation (fm)",&sigma[2],0,0,"%.5g");
+        options_changed |= ImGui::InputDouble("Diffuseness standard deviation (fm)",&sigma[3],0,0,"%.5g");
+        options_changed |= ImGui::Checkbox("Use covariance matrix",&use_covariance);
+        if (use_covariance && ImGui::TreeNode("Covariance: Q, depth, radius, diffuseness")) {
+          for (int row=0;row<4;++row) for (int col=0;col<4;++col) {
+            std::string label="C["+std::to_string(row)+","+std::to_string(col)+"]";
+            options_changed |= ImGui::InputDouble(label.c_str(),&covariance[row*4+col],0,0,"%.5g");
+          }
+          ImGui::TreePop();
+        }
+        options_changed |= ImGui::InputInt("Random seed",&analysis_seed);
+        options_changed |= ImGui::InputInt("Samples",&analysis_draws);
+        if(options_changed) {analysis_cancel->store(true); discard_analysis=true; analysis_result.reset();}
+        if (analysis_job.valid()) {
+          ImGui::TextUnformatted("Calculating in background...");
+          if (ImGui::Button("Cancel analysis")) { analysis_cancel->store(true); discard_analysis=true; }
+        } else if (valid && analysis_seed>=0 && analysis_draws>0 && analysis_draws<=1000000 && ImGui::Button("Run numerical analysis")) {
+          auto input=make_spherical(); auto options=numerical_options; auto deviations=sigma;
+          alpha::UncertaintyRequest u; u.baseline=input; u.standard_deviations=deviations; if(use_covariance) u.covariance=covariance; u.seed=static_cast<std::uint64_t>(analysis_seed); u.draws=static_cast<std::size_t>(analysis_draws);
+          analysis_cancel=std::make_shared<std::atomic_bool>(false); auto token=analysis_cancel; discard_analysis=false; analysis_result.reset();
+          analysis_job=std::async(std::launch::async,[input,options,u,token] {
+            Analysis x; x.numerov=alpha::calculate_numerov(input,options,token.get());
+            if (!token->load()) x.uncertainty=alpha::sample_spherical_uncertainty(u,[token]{return token->load();});
+            return x;
+          });
+        }
+        if (analysis_result) {
+          auto &n=analysis_result->numerov; auto &u=analysis_result->uncertainty;
+          ImGui::Text("Numerov: %s",n.status.c_str()); ImGui::TextWrapped("%s",n.message.c_str());
+          if(n.log10_transmission) ImGui::Text("log10 transmission: %.8g",*n.log10_transmission);
+          if(n.step_error_decades && n.match_error_decades) ImGui::Text("Step / exterior error: %.3g / %.3g decades",*n.step_error_decades,*n.match_error_decades);
+          if(n.wkb_difference_decades) ImGui::Text("Numerov minus WKB: %.5g decades",*n.wkb_difference_decades);
+          if(n.log10_half_life_s) ImGui::Text("Numerov log10 half-life: %.8g",*n.log10_half_life_s);
+          ImGui::Text("Parameter draws: %zu accepted, %zu rejected",u.accepted,u.rejected);
+          if(u.log10_half_life_p50) ImGui::Text("log10 half-life p16 / p50 / p84: %.4g / %.4g / %.4g",*u.log10_half_life_p16,*u.log10_half_life_p50,*u.log10_half_life_p84);
+          ImGui::TextWrapped("%s",u.message.c_str());
+          ImGui::TextWrapped("Inner-lead radius is a model assumption. Physical centrifugal term; same preformation and assault frequency. Not a resonance width.");
+        }
+        ImGui::TreePop();
+      }
+#endif
       const char *models[] = {"Selected WKB", "Qi (2009)", "Ren (2026)"};
       if (ImGui::Combo("Playback model", &model, models, 3)) {
         playing = false;
@@ -572,6 +651,9 @@ int viewer(int argc, char **argv) {
       }
       glfwSwapBuffers(window);
     }
+#ifdef ALPHA_ENABLE_NUMEROV
+    analysis_cancel->store(true);
+#endif
   }
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
@@ -580,3 +662,6 @@ int viewer(int argc, char **argv) {
   glfwTerminate();
   return 0;
 }
+
+
+

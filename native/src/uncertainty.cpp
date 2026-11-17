@@ -4,7 +4,7 @@
 #include <random>
 #include <vector>
 namespace alpha {
-UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest& r) {
+UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest& r, const std::function<bool()>& cancelled) {
     UncertaintyResult out;
     if (r.draws == 0 || r.draws > 1000000) { out.status="invalid"; out.message="Draw count must be between 1 and 1000000"; return out; }
     std::array<double,16> cov{};
@@ -20,6 +20,7 @@ UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest& r) {
     }
     std::mt19937_64 rng(r.seed); std::normal_distribution<double> normal; std::vector<double> values; values.reserve(r.draws);
     for (std::size_t n=0;n<r.draws;++n) {
+        if (cancelled && cancelled()) {out.status="cancelled"; out.message="Cancelled"; return out;}
         std::array<double,4> z{}, d{}; for (auto& v:z) v=normal(rng);
         for (int i=0;i<4;++i) for (int j=0;j<=i;++j) d[i]+=L[4*i+j]*z[j];
         auto p=r.baseline; p.q_mev+=d[0]; p.potential.nuclear_depth_mev+=d[1]; p.potential.nuclear_radius_fm+=d[2]; p.potential.diffuseness_fm+=d[3];
@@ -31,3 +32,4 @@ UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest& r) {
     out.message=out.assumed_independent ? "Input covariance absent: parameters assumed independent; model and numerical errors are separate" : "Parameter spread only; model and numerical errors are separate"; return out;
 }
 }
+
