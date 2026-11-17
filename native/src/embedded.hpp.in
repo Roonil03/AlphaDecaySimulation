@@ -1,0 +1,6 @@
+#pragma once
+namespace embedded {
+inline constexpr const char* catalog = R"ALPHA(@CATALOG_JSON@)ALPHA";
+inline constexpr const char* validation = R"ALPHA(@VALIDATION_JSON@)ALPHA";
+inline constexpr const char* holdout = R"ALPHA(@HOLDOUT_JSON@)ALPHA";
+}
