@@ -1,4 +1,5 @@
 #include "alpha/core.hpp"
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 
@@ -47,3 +48,4 @@ Result calculate(const Request& p) {
     return result;
 }
 }
+

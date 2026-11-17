@@ -2,6 +2,7 @@
 #include "embedded.hpp"
 #include "viewer.hpp"
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <set>
@@ -55,3 +56,4 @@ int main(int argc, char** argv) {
         return viewer(argc,argv);
     } catch(const std::exception& e) { std::cerr << json({{"schema_version",1},{"error",e.what()}}).dump() << '\n'; return 1; }
 }
+
