@@ -4,35 +4,61 @@ on:
   pull_request:
 
 jobs:
-  windows-desktop:
-    runs-on: windows-latest
+  native:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Build standalone desktop executable
-        shell: powershell
-        run: .\desktop\build.ps1 -OutputPath .\dist\AlphaDecay.exe
-      - name: Run desktop self-test
-        shell: powershell
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Linux graphics build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev xvfb
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release --parallel 2
+      - name: Test native contracts
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Test Linux render
+        if: runner.os == 'Linux'
+        run: xvfb-run -a build/AlphaDecay --render-preview build/preview.png Dy-154
+      - name: Package Windows executable
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          $p = Start-Process -FilePath .\dist\AlphaDecay.exe -ArgumentList '--self-test' -Wait -PassThru -WindowStyle Hidden
-          if ($p.ExitCode -ne 0) { throw "Desktop self-test failed ($($p.ExitCode))" }
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item build/Release/AlphaDecay.exe package/
+          Copy-Item CREDITS.md package/
+      - name: Package Linux executable
+        if: runner.os == 'Linux'
+        run: mkdir package && cp build/AlphaDecay CREDITS.md package/
       - uses: actions/upload-artifact@v4
         with:
-          name: AlphaDecay-windows
-          path: dist/AlphaDecay.exe
+          name: AlphaDecay-${{ runner.os }}
+          path: package/*
           if-no-files-found: error
       - uses: actions/download-artifact@v4
         with:
-          name: AlphaDecay-windows
-          path: ${{ runner.temp }}/alpha-decay-extracted
-      - name: Verify extracted standalone artifact
-        shell: powershell
+          name: AlphaDecay-${{ runner.os }}
+          path: ${{ runner.temp }}/isolated-alpha
+      - name: Check isolated Windows executable
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          $isolated = Join-Path $env:RUNNER_TEMP 'alpha-decay-extracted'
-          $files = @(Get-ChildItem -LiteralPath $isolated -File -Recurse)
-          if ($files.Count -ne 1 -or $files[0].Name -ne 'AlphaDecay.exe') { throw 'Expected a single executable artifact' }
-          $p = Start-Process -FilePath $files[0].FullName -WorkingDirectory $isolated -ArgumentList '--self-test' -Wait -PassThru -WindowStyle Hidden
-          if ($p.ExitCode -ne 0) { throw "Extracted artifact self-test failed ($($p.ExitCode))" }
+          $exe = Join-Path $env:RUNNER_TEMP 'isolated-alpha/AlphaDecay.exe'
+          & $exe --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Check isolated Linux executable
+        if: runner.os == 'Linux'
+        run: |
+          chmod +x "$RUNNER_TEMP/isolated-alpha/AlphaDecay"
+          cd "$RUNNER_TEMP/isolated-alpha"
+          ./AlphaDecay --self-test
+          xvfb-run -a ./AlphaDecay --render-preview preview.png Os-186 1050 700
   integration:
     runs-on: ubuntu-latest
     steps:
@@ -58,3 +84,4 @@ jobs:
       - name: Stop services
         if: always()
         run: docker compose down --volumes
+
