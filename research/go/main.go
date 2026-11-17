@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -23,9 +24,10 @@ type Campaign struct {
 	Cases []Case `json:"cases"`
 }
 type Result struct {
-	ID       string          `json:"id"`
-	Response json.RawMessage `json:"response,omitempty"`
-	Error    string          `json:"error,omitempty"`
+	ID        string          `json:"id"`
+	Response  json.RawMessage `json:"response,omitempty"`
+	Error     string          `json:"error,omitempty"`
+	ErrorKind string          `json:"error_kind,omitempty"`
 }
 
 func run(ctx context.Context, executable string, c Case, timeout time.Duration) Result {
@@ -37,8 +39,11 @@ func run(ctx context.Context, executable string, c Case, timeout time.Duration) 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, executable, "--run")
-	cmd.Stdin = bytesReader(c.Request)
-	out, err := cmd.Output()
+	cmd.Stdin = bytes.NewReader(c.Request)
+	var stdout, stderr limitedBuffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
+	out := stdout.Bytes()
 	if ctx.Err() != nil {
 		r.Error = ctx.Err().Error()
 		return r
@@ -46,7 +51,13 @@ func run(ctx context.Context, executable string, c Case, timeout time.Duration) 
 	if err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
-			r.Error = fmt.Sprintf("native core failed: %s", exit.Stderr)
+			r.Error = fmt.Sprintf("native core failed: %s", stderr.Bytes())
+			var nativeError struct {
+				Error string `json:"error"`
+			}
+			if json.Unmarshal(stderr.Bytes(), &nativeError) == nil && nativeError.Error != "" {
+				r.ErrorKind = "domain"
+			}
 		} else {
 			r.Error = err.Error()
 		}
@@ -59,17 +70,15 @@ func run(ctx context.Context, executable string, c Case, timeout time.Duration) 
 	r.Response = json.RawMessage(out)
 	return r
 }
-func bytesReader(b []byte) io.Reader { return &rawReader{b: b} }
 
-type rawReader struct{ b []byte }
+// limitedBuffer prevents a faulty child from exhausting scheduler memory.
+type limitedBuffer struct{ bytes.Buffer }
 
-func (r *rawReader) Read(p []byte) (int, error) {
-	if len(r.b) == 0 {
-		return 0, io.EOF
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	if b.Len()+len(p) > 1<<20 {
+		return 0, errors.New("native output exceeds 1 MiB")
 	}
-	n := copy(p, r.b)
-	r.b = r.b[n:]
-	return n, nil
+	return b.Buffer.Write(p)
 }
 
 func execute(ctx context.Context, executable string, cases []Case, workers int, timeout time.Duration) ([]Result, error) {
@@ -105,6 +114,7 @@ func execute(ctx context.Context, executable string, cases []Case, workers int, 
 func main() {
 	executable := flag.String("core", "", "path to native executable")
 	workers := flag.Int("workers", 1, "maximum concurrent core processes")
+	inputPath := flag.String("input", "", "campaign JSON file (default stdin)")
 	timeout := flag.Duration("timeout", 30*time.Second, "per-case timeout")
 	flag.Parse()
 	if *executable == "" {
@@ -112,7 +122,17 @@ func main() {
 		os.Exit(2)
 	}
 	var c Campaign
-	dec := json.NewDecoder(io.LimitReader(os.Stdin, 16<<20))
+	var input io.Reader = os.Stdin
+	if *inputPath != "" {
+		file, err := os.Open(*inputPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		defer file.Close()
+		input = file
+	}
+	dec := json.NewDecoder(io.LimitReader(input, 16<<20))
 	if err := dec.Decode(&c); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)

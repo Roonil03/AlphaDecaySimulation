@@ -14,6 +14,10 @@ func TestMain(m *testing.M) {
 		if json.NewDecoder(os.Stdin).Decode(&req) != nil {
 			os.Exit(3)
 		}
+		if req["large"] == true {
+			os.Stdout.Write(make([]byte, 2<<20))
+			os.Exit(0)
+		}
 		if req["sleep"] == true {
 			time.Sleep(5 * time.Second)
 		}
@@ -50,5 +54,13 @@ func TestCancellation(t *testing.T) {
 	got, err := execute(ctx, exe, []Case{{"a", json.RawMessage(`{}`)}}, 1, time.Second)
 	if err != nil || got[0].Error != "context canceled" {
 		t.Fatalf("%+v %v", got, err)
+	}
+}
+
+func TestOutputLimit(t *testing.T) {
+	exe, _ := os.Executable()
+	got := run(context.Background(), exe, Case{"large", json.RawMessage(`{"large":true}`)}, 10*time.Second)
+	if got.Error == "" || len(got.Response) != 0 {
+		t.Fatalf("unbounded output: %+v", got)
 	}
 }

@@ -1,6 +1,5 @@
 """Fit one common preformation factor using the native core as prediction authority."""
 import argparse
-import csv
 import json
 import math
 import subprocess
@@ -73,3 +72,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
