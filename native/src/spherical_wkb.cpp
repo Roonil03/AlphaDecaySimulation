@@ -33,12 +33,13 @@ SphericalWkbResult calculate_spherical_wkb(const SphericalWkbRequest& req) {
     const auto& p=req.potential;
     auto fail=[](const char* status, const char* message) { SphericalWkbResult r; r.status=status; r.message=message; return r; };
     const auto finite=[](double x){return std::isfinite(x);};
-    if (!finite(req.q_mev) || req.q_mev <= 0 || !finite(req.preformation) || req.preformation < 0 || req.preformation > 1 ||
+    if (!finite(req.q_mev) || req.q_mev < 0 || !finite(req.preformation) || req.preformation < 0 || req.preformation > 1 ||
         !finite(req.assault_hz) || req.assault_hz <= 0 || !finite(p.daughter_z) || p.daughter_z <= 0 ||
         !finite(p.reduced_mass_mev) || p.reduced_mass_mev <= 0 || p.l < 0 || !finite(p.nuclear_depth_mev) || p.nuclear_depth_mev <= 0 ||
         !finite(p.nuclear_radius_fm) || p.nuclear_radius_fm <= 0 || !finite(p.charge_radius_fm) || p.charge_radius_fm <= 0 ||
         !finite(p.diffuseness_fm) || p.diffuseness_fm <= 0)
         return fail("invalid_input", "Parameters must be finite and in their physical domain.");
+    if (req.q_mev == 0) return fail("closed_barrier", "Zero decay energy has no finite outer Coulomb turning point.");
     const auto f=[&](double r){return spherical_potential(p,r)-req.q_mev;};
     // Fine scan through the nuclear region, then exponentially spaced exterior samples.
     const double end=std::max(p.charge_radius_fm, p.nuclear_radius_fm+40*p.diffuseness_fm);
@@ -46,6 +47,7 @@ SphericalWkbResult calculate_spherical_wkb(const SphericalWkbRequest& req) {
     if (!finite(end) || end/step > 1000000) return fail("unsupported_topology", "Potential scale exceeds scan limit.");
     std::vector<Edge> edges;
     double previous=std::min(1e-8,step/100), y=f(previous);
+    const bool initially_forbidden = y > 0;
     auto visit=[&](double r, bool discontinuity) {
         double value=f(r);
         if ((y>0)!=(value>0)) edges.push_back({discontinuity ? p.nuclear_radius_fm : root(f,previous,r),value>0});
@@ -65,7 +67,9 @@ SphericalWkbResult calculate_spherical_wkb(const SphericalWkbRequest& req) {
     // Only one outgoing barrier and at most one inner centrifugal boundary are supported.
     std::vector<Edge> outgoing;
     for (const auto& edge: edges) if (edge.enters_forbidden) outgoing.push_back(edge);
-    if (outgoing.empty()) return fail("above_barrier", "No barrier enclosing an allowed pocket was found.");
+    if (outgoing.empty()) return initially_forbidden && !edges.empty()
+        ? fail("no_pocket", "No allowed pocket lies inside the outer turning point.")
+        : fail("above_barrier", "No outgoing barrier enclosing an allowed pocket was found.");
     if (outgoing.size()!=1 || edges.back().enters_forbidden || edges.size()>3 ||
         (edges.size()==3 && (edges[0].enters_forbidden || !edges[1].enters_forbidden)))
         return fail("unsupported_topology", "Expected one allowed pocket and one outgoing barrier.");
@@ -79,11 +83,14 @@ SphericalWkbResult calculate_spherical_wkb(const SphericalWkbRequest& req) {
     try {
         const double a=0,b=pi/2,m=(a+b)/2,fa=integrand(a),fm=integrand(m),fb=integrand(b);
         const double action=integrate(integrand,a,b,fa,fm,fb,(b-a)*(fa+4*fm+fb)/6,1e-8,28);
+        if (!finite(action)) return fail("numerical_error", "Action is not finite.");
         SphericalWkbResult result; result.status=req.preformation==0 ? "zero_preformation" : "ok";
         result.inner_turning_fm=inner; result.outer_turning_fm=outer; result.action=action;
         result.log10_penetrability=-2*action/std::log(10.0);
         if (req.preformation>0) result.log10_half_life_s=std::log10(std::log(2.0))-std::log10(req.assault_hz)-std::log10(req.preformation)-*result.log10_penetrability;
         else result.message="Zero preformation gives an infinite half-life; the JSON value must be null.";
+        if (!finite(*result.log10_penetrability) || (result.log10_half_life_s && !finite(*result.log10_half_life_s)))
+            return fail("numerical_error", "Log result is not finite.");
         return result;
     } catch (const std::exception&) { return fail("numerical_error", "Action quadrature did not converge."); }
 }

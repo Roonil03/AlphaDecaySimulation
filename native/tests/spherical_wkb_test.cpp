@@ -35,6 +35,7 @@ int main() {
         near(centrifugal_potential(p,7)/physical,2.25/2,1e-12,"Langer convention");
         result=calculate_spherical_wkb(request);
         check(result.status=="ok", "centrifugal inner boundary retains outgoing pocket");
+        request.q_mev=0; check(calculate_spherical_wkb(request).status=="closed_barrier","zero-energy closed barrier");
         request.q_mev=-1; check(calculate_spherical_wkb(request).status=="invalid_input","invalid energy");
         std::cout << "spherical WKB tests passed\n";
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return EXIT_FAILURE; }
