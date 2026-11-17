@@ -360,18 +360,7 @@ int viewer(int argc, char **argv) {
               data["channels"].push_back(row);
             }
             channel_result=run_channels(data,input); combined_log_half.reset();
-            double maxlog=-INFINITY, sum=0; bool complete=true;
-            for(const auto& row:channel_result["channels"]) {
-              const auto status=row["status"].get<std::string>();
-              if(status!="ok" && status!="closed" && status!="forbidden" && status!="zero_preformation") complete=false;
-              if(!row["log10_rate_hz"].is_null()) maxlog=std::max(maxlog,row["log10_rate_hz"].get<double>());
-            }
-            if(competing_enabled && competing_rate>0) maxlog=std::max(maxlog,std::log10(competing_rate));
-            if(complete && std::isfinite(maxlog)) {
-              for(const auto& row:channel_result["channels"]) if(!row["log10_rate_hz"].is_null()) sum+=std::pow(10.0,row["log10_rate_hz"].get<double>()-maxlog);
-              if(competing_enabled && competing_rate>0) sum+=std::pow(10.0,std::log10(competing_rate)-maxlog);
-              combined_log_half=std::log10(std::log(2.0))-maxlog-std::log10(sum);
-            }
+            if(!channel_result["log10_total_half_life_s"].is_null()) combined_log_half=channel_result["log10_total_half_life_s"].get<double>();
           }
         } else {
           result=alpha::calculate(request);
@@ -473,7 +462,7 @@ int viewer(int argc, char **argv) {
         if (advanced) {
           changed |= ImGui::InputDouble("Beta 2", &beta2, 0, 0, "%.4g");
           changed |= ImGui::InputDouble("Beta 4", &beta4, 0, 0, "%.4g");
-          ImGui::TextWrapped("Blue surface: R(theta); outer wireframe and barrier are schematic.");
+          ImGui::TextWrapped("Blue: R(theta). Gold: spherical-reference outer radius. Barrier is schematic.");
           changed |= ImGui::Checkbox("Parent spin known", &parent_known);
           if(parent_known) { changed |= ImGui::InputInt("Parent twice J", &parent_twice_j); changed |= ImGui::InputInt("Parent parity (+1/-1)", &parent_parity); }
           changed |= ImGui::Checkbox("Include competing rate", &competing_enabled);
@@ -560,7 +549,7 @@ int viewer(int argc, char **argv) {
       }
       if(valid && potential_model && advanced && ImGui::TreeNode("Channel results")) {
         ImGui::TextWrapped(competing_enabled ? "Branches include the supplied competing rate." : "Branches are conditional on alpha decay.");
-        if(combined_log_half) ImGui::Text("Combined log10 half-life: %.8g",*combined_log_half);
+        if(combined_log_half) ImGui::Text(competing_enabled ? "Total log10 half-life: %.8g" : "Alpha-only log10 half-life: %.8g",*combined_log_half);
         for(const auto& row:channel_result["channels"]) {
           ImGui::Separator(); ImGui::Text("Channel %s: %s",row["name"].get<std::string>().c_str(),row["status"].get<std::string>().c_str());
           ImGui::Text("Q = %.6g MeV",row["q_mev"].get<double>());
@@ -598,7 +587,7 @@ int viewer(int argc, char **argv) {
                      request.parent_a == x["a"].get<int>() &&
                      request.q_mev == x["q_mev"].get<double>() &&
                      request.l == x.value("l", 0);
-        if (match) {
+        if (match && !(advanced && potential_model)) {
           double measured = x["partial_half_life_s"].get<double>();
           ImGui::Text("Measured partial half-life: %.6g s", measured);
           ImGui::Text("Measured: %s", time_label(std::log10(measured)).c_str());
@@ -633,7 +622,7 @@ int viewer(int argc, char **argv) {
           if (x.value("validation_group", std::string{}) == "ren_holdout")
             ImGui::TextWrapped("Ren holdout: excluded by the published "
                                "half-life uncertainty criterion.");
-        } else
+        } else if (!(advanced && potential_model))
           ImGui::TextWrapped(
               "Custom channel: no catalog measurement associated.");
       }
@@ -676,3 +665,4 @@ int viewer(int argc, char **argv) {
   glfwTerminate();
   return 0;
 }
+

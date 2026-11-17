@@ -3,6 +3,8 @@
 #include "alpha/deformation.hpp"
 #include <set>
 #include <limits>
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 using json=nlohmann::json;
 namespace {
@@ -37,5 +39,16 @@ json run_channels(const json& input,const alpha::SphericalWkbRequest& base) {
  }
  auto rates=alpha::channel_rates(cs,selections,logs,competing);
  for(size_t i=0;i<rates.size();++i) { rows[i]["status"]=rates[i].status; rows[i]["log10_rate_hz"]=opt(rates[i].log10_rate_hz); rows[i]["log10_partial_half_life_s"]=opt(rates[i].log10_partial_half_life_s); rows[i]["conditional_alpha_branch"]=opt(rates[i].conditional_alpha_branch); rows[i]["total_branch"]=opt(rates[i].total_branch); }
- return {{"channels",rows},{"branch_convention",competing?"conditional_alpha_and_total":"conditional_alpha"}};
+ bool complete=std::all_of(rates.begin(),rates.end(),[](const alpha::ChannelRate& r){return r.status=="ok" || r.status=="closed" || r.status=="forbidden" || r.status=="zero_preformation";});
+ std::optional<double> alpha_log, total_log, total_half;
+ if(complete) {
+  double largest=-INFINITY, scaled=0;
+  for(const auto& r:rates) if(r.log10_rate_hz) largest=std::max(largest,*r.log10_rate_hz);
+  if(std::isfinite(largest)) {for(const auto& r:rates) if(r.log10_rate_hz) scaled+=std::pow(10.0,*r.log10_rate_hz-largest); alpha_log=largest+std::log10(scaled);}
+  if(competing && *competing>0) {double c=std::log10(*competing); if(alpha_log) {double m=std::max(c,*alpha_log); total_log=m+std::log10(std::pow(10.0,c-m)+std::pow(10.0,*alpha_log-m));} else total_log=c;}
+  else total_log=alpha_log;
+  if(total_log) total_half=std::log10(std::log(2.0))-*total_log;
+ }
+ return {{"channels",rows},{"branch_convention",competing?"conditional_alpha_and_total":"conditional_alpha"},
+         {"log10_total_alpha_rate_hz",opt(alpha_log)},{"log10_total_rate_hz",opt(total_log)},{"log10_total_half_life_s",opt(total_half)}};
 }

@@ -107,7 +107,10 @@ class Contract(unittest.TestCase):
                 {'name': 'closed', 'excitation_mev': 20, 'l': 0}], 'competing_rate_hz': 1.0}
         proc = self.run_request(request)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        rows = json.loads(proc.stdout)['channels']
+        answer = json.loads(proc.stdout)
+        self.assertIsNotNone(answer['log10_total_alpha_rate_hz'])
+        self.assertIsNotNone(answer['log10_total_half_life_s'])
+        rows = answer['channels']
         self.assertEqual([r['status'] for r in rows], ['ok', 'ok', 'closed'])
         self.assertEqual(rows[1]['l'], 2)
         self.assertAlmostEqual(rows[0]['log10_penetrability'], json.loads(sphere.stdout)['log10_penetrability'], places=10)
@@ -124,7 +127,9 @@ class Contract(unittest.TestCase):
         self.assertEqual(result[1]['status'], 'forbidden')
         request['channels'][1].pop('daughter_spin')
         request['channels'][1].pop('l')
-        result = json.loads(self.run_request(request).stdout)['channels']
+        unresolved = json.loads(self.run_request(request).stdout)
+        self.assertIsNone(unresolved['log10_total_half_life_s'])
+        result = unresolved['channels']
         self.assertEqual(result[1]['status'], 'unknown_spin_requires_l')
         self.assertTrue(all(r['conditional_alpha_branch'] is None for r in result))
         for bad in (1.5, True, 9223372036854775808):

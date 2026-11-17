@@ -62,3 +62,5 @@ For deterministic screenshots, append an optional `external`, `square_well`,
 or `woods_saxon` argument after the preview width and height. See
 [the scientific notes](../docs/spherical-models.md) for model assumptions,
 Te-104 source distinctions and numerical scope.
+
+Deformed shapes and daughter-channel JSON, convergence diagnostics, and viewer controls are described in [deformed channels](../docs/deformed-channels.md).

@@ -10,3 +10,11 @@ References: [Denisov and Khudenko, Atomic Data and Nuclear Data Tables 95 (2009)
 
 
 If a channel is unresolved or its barrier calculation fails, branching fractions are absent for the entire set because the denominator is incomplete. With no alpha rate, conditional alpha branches are undefined; an explicitly supplied positive competing rate still permits zero overall branches for closed or zero-rate channels.
+
+## Native JSON and viewer
+
+Use `--run` with the usual schema-1 fields and `potential_model` set to `square_well` or `woods_saxon`. Add `deformation: {"beta2": 0.2, "beta4": 0.05}` and/or a nonempty `channels` array. A channel accepts `name`, `excitation_mev`, optional `daughter_spin: {"twice_j": 4, "parity": 1}`, optional `l`, and optional per-channel `preformation` and `assault_hz`; omitted rate inputs inherit the request values. The optional `parent_spin` has the same `twice_j` and `parity` fields. If deformation is given without a channel list, the request's `l` supplies one ground-state channel. `competing_rate_hz` is an independent non-alpha rate, not a measured branch weight.
+
+The response contains per-channel status, Q, chosen l, log10 penetrability, log10 partial rate and half-life, conditional alpha branch, and (when a competing rate is supplied) overall branch. Open channels also report angular and charge log10 refinement differences, angular point count, multipole order, and a sampled Coulomb difference. The aggregate fields `log10_total_alpha_rate_hz`, `log10_total_rate_hz`, and `log10_total_half_life_s` are null when the rate is zero or the channel set is incomplete. Without a competing rate the total is alpha-only; with one it includes that supplied rate.
+
+In the viewer select a nuclear potential and enable **Deformation and daughter channels**. The channel editor supports adding and removing daughter states, specifying or deriving l, and per-channel rate inputs. Results and refinement diagnostics appear under **Channel results** after Calculate. The blue 3D surface follows the normalized nuclear radius; the gold spherical-reference turning surface and barrier depiction are schematic. Preview a nonzero shape with `AlphaDecay --render-preview image.png Po-212 1280 800 woods_saxon 0.2 0.05`.
