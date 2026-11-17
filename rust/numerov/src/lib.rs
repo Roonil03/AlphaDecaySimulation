@@ -34,14 +34,16 @@ fn valid(p:&Request)->bool {
 fn outgoing(rho:f64,eta:f64,l:i32)->Option<C> {
     let mut a=C::new(1.0,0.0); let mut sum=a; let mut prev=1.0;
     let ll=(l as f64)*(l as f64+1.0);
+    let mut converged=false;
     for n in 0..80 {
         let n=n as f64;
         let factor=C::new(n*(n+1.0)-eta*eta-ll, eta*(2.0*n+1.0));
         let t=a*factor; a=C::new(t.im,-t.re)/(2.0*(n+1.0)*rho);
         let size=a.abs();
-        if size>prev { return if prev<1e-12 { Some(sum) } else { None }; }
-        sum=sum+a; if size<1e-15*sum.abs() { break; } prev=size;
+        if size>prev { if prev<1e-12 {converged=true; break} else {return None} }
+        sum=sum+a; if size<1e-15*sum.abs() { converged=true; break; } prev=size;
     }
+    if !converged {return None}
     let phase=rho-eta*(2.0*rho).ln(); Some(sum*C::new(phase.cos(),phase.sin()))
 }
 fn solve_once(p:&Request, step:f64, outer:f64, cancel:&dyn Fn()->bool)->Option<f64> {
@@ -145,6 +147,8 @@ mod tests {
         let r=calculate(&p); assert!(r.status<=1,"{}",String::from_utf8_lossy(&r.message)); assert!(r.match_error_decades<1e-4,"{}",r.match_error_decades);
     }
 }
+
+
 
 
 
