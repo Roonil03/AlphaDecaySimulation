@@ -43,3 +43,36 @@ if(Python3_Interpreter_FOUND)
 endif()
 
 
+
+option(ALPHA_ENABLE_NUMEROV "Build and test the independent Rust Numerov solver" ON)
+if(ALPHA_ENABLE_NUMEROV)
+  find_program(CARGO_EXECUTABLE cargo REQUIRED)
+  set(NUMEROV_MANIFEST "${CMAKE_SOURCE_DIR}/rust/numerov/Cargo.toml")
+  set(NUMEROV_TARGET_DIR "${CMAKE_BINARY_DIR}/cargo")
+  if(WIN32)
+    set(NUMEROV_LIBRARY "${NUMEROV_TARGET_DIR}/release/alpha_numerov.lib")
+  else()
+    set(NUMEROV_LIBRARY "${NUMEROV_TARGET_DIR}/release/libalpha_numerov.a")
+  endif()
+  add_custom_command(OUTPUT "${NUMEROV_LIBRARY}"
+    COMMAND ${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${NUMEROV_TARGET_DIR}
+            ${CARGO_EXECUTABLE} build --locked --release --manifest-path ${NUMEROV_MANIFEST}
+    DEPENDS rust/numerov/Cargo.toml rust/numerov/Cargo.lock rust/numerov/src/lib.rs
+    VERBATIM)
+  add_custom_target(alpha_numerov_build DEPENDS "${NUMEROV_LIBRARY}")
+  add_library(alpha_numerov STATIC IMPORTED GLOBAL)
+  set_target_properties(alpha_numerov PROPERTIES IMPORTED_LOCATION "${NUMEROV_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/rust/numerov/include")
+  add_dependencies(alpha_numerov alpha_numerov_build)
+  if(WIN32)
+    target_link_libraries(alpha_numerov INTERFACE ws2_32 userenv bcrypt ntdll)
+  elseif(UNIX)
+    target_link_libraries(alpha_numerov INTERFACE ${CMAKE_DL_LIBS} m pthread)
+  endif()
+  add_executable(numerov_abi_test native/tests/numerov_abi_test.cpp)
+  target_link_libraries(numerov_abi_test PRIVATE alpha_numerov)
+  add_test(NAME numerov-abi COMMAND numerov_abi_test)
+  add_test(NAME numerov-rust COMMAND ${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${NUMEROV_TARGET_DIR}
+    ${CARGO_EXECUTABLE} test --locked --manifest-path ${NUMEROV_MANIFEST})
+endif()
+
