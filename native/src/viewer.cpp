@@ -1,6 +1,7 @@
 #include "viewer.hpp"
 #include "alpha/core.hpp"
 #include "alpha/spherical_wkb.hpp"
+
 #include "alpha/uncertainty.hpp"
 #ifdef ALPHA_ENABLE_NUMEROV
 #include "alpha/numerov.hpp"
@@ -8,6 +9,9 @@
 #include <memory>
 #include <chrono>
 #endif
+
+#include "alpha/spherical_model.hpp"
+
 #include "embedded.hpp"
 #include <glad/gl.h>
 #include <imgui.h>
@@ -295,7 +299,7 @@ int viewer(int argc, char **argv) {
     Scene scene;
     alpha::Request request;
     alpha::Result result{};
-    bool valid = false, playing = false, barrier = false;
+    bool valid = false, playing = false, barrier = false, reference_available = false;
     float elapsed = 0;
     int model = 0, potential_model = 0, convention = 0;
     double depth = 100, nuclear_radius = 9, diffuseness = .65, charge_radius = 9;
@@ -348,13 +352,23 @@ int viewer(int argc, char **argv) {
     };
     auto calculate = [&] {
       try {
-        auto checked = request;
-        if (potential_model && checked.preformation == 0) checked.preformation = 1;
-        result = alpha::calculate(checked);
+        reference_available = false;
+        result = {};
         if (potential_model) {
-          auto input=make_spherical();
-          alternative=alpha::calculate_spherical_wkb(input);
-          if (alternative.status == "invalid_input") throw std::invalid_argument(alternative.message);
+
+          alpha::SphericalPotential v;
+          v.kind=potential_model == 1 ? alpha::PotentialKind::square_well : alpha::PotentialKind::woods_saxon;
+          v.nuclear_depth_mev=depth; v.nuclear_radius_fm=nuclear_radius;
+          v.diffuseness_fm=diffuseness; v.charge_radius_fm=charge_radius;
+          v.centrifugal=convention == 0 ? alpha::CentrifugalConvention::physical : alpha::CentrifugalConvention::langer_wkb;
+          auto calculation=alpha::calculate_spherical_model(request, v);
+          alternative=calculation.spherical;
+          reference_available=calculation.external_reference.has_value();
+          if (reference_available) result=*calculation.external_reference;
+        } else {
+          result=alpha::calculate(request);
+          reference_available=true;
+
         }
         valid = true;
         error.clear();
@@ -376,8 +390,8 @@ int viewer(int argc, char **argv) {
     calculate();
     auto selected_log = [&]() -> std::optional<double> {
       if (!valid) return {};
-      if (model == 1) return result.research_log10_half_life_s;
-      if (model == 2) return result.shell_log10_half_life_s;
+      if (model == 1) return reference_available ? result.research_log10_half_life_s : std::nullopt;
+      if (model == 2) return reference_available ? result.shell_log10_half_life_s : std::nullopt;
       return potential_model ? alternative.log10_half_life_s : std::optional<double>{result.log10_half_life_s};
     };
     double last = glfwGetTime();
@@ -568,7 +582,7 @@ int viewer(int argc, char **argv) {
           if (alternative.log10_half_life_s) ImGui::Text("Spherical log10(t / s): %.8g", *alternative.log10_half_life_s);
           if (alternative.log10_penetrability) ImGui::Text("log10 penetrability: %.8g", *alternative.log10_penetrability);
           if (alternative.inner_turning_fm) ImGui::Text("Inner barrier boundary: %.5g fm", *alternative.inner_turning_fm);
-          if (request.preformation > 0) ImGui::Text("External reference log10(t / s): %.8g", result.log10_half_life_s);
+          if (reference_available) ImGui::Text("External reference log10(t / s): %.8g", result.log10_half_life_s);
         }
         if (result.research_log10_half_life_s)
           ImGui::Text("Qi log10(t / s): %.8g",
@@ -662,6 +676,7 @@ int viewer(int argc, char **argv) {
   glfwTerminate();
   return 0;
 }
+
 
 
 

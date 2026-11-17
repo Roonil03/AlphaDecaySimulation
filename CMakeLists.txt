@@ -17,7 +17,7 @@ find_package(OpenGL REQUIRED)
 add_library(imgui STATIC ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp)
 target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
 target_link_libraries(imgui PUBLIC glfw OpenGL::GL)
-add_library(alpha_core STATIC native/src/core.cpp native/src/potentials.cpp native/src/spherical_wkb.cpp native/src/uncertainty.cpp)
+add_library(alpha_core STATIC native/src/core.cpp native/src/potentials.cpp native/src/spherical_wkb.cpp native/src/spherical_model.cpp native/src/uncertainty.cpp)
 target_include_directories(alpha_core PUBLIC native/include)
 file(READ "${CMAKE_SOURCE_DIR}/observatory/isotopes.json" CATALOG_JSON)
 file(READ "${CMAKE_SOURCE_DIR}/observatory/validation.json" VALIDATION_JSON)
@@ -87,6 +87,7 @@ if(ALPHA_ENABLE_NUMEROV)
   add_test(NAME numerov-rust COMMAND ${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${NUMEROV_TARGET_DIR}
     ${CARGO_EXECUTABLE} test --locked --manifest-path ${NUMEROV_MANIFEST})
 endif()
+
 
 
 
