@@ -16,7 +16,8 @@ struct ChannelInput {
 };
 struct ChannelSelection { std::string status; double q_mev = 0; std::optional<int> l; };
 ChannelSelection select_channel(double ground_q_mev, std::optional<SpinParity> parent, const ChannelInput&);
-struct ChannelRate { std::string status; std::optional<double> log10_rate_hz, log10_partial_half_life_s; double conditional_alpha_branch = 0; std::optional<double> total_branch; };
+struct ChannelRate { std::string status; std::optional<double> log10_rate_hz, log10_partial_half_life_s; std::optional<double> conditional_alpha_branch, total_branch; };
 // log10 penetrabilities are supplied by the barrier model; null denotes no rate.
 std::vector<ChannelRate> channel_rates(const std::vector<ChannelInput>&, const std::vector<ChannelSelection>&, const std::vector<std::optional<double>>&, std::optional<double> competing_rate_hz = std::nullopt);
 }
+

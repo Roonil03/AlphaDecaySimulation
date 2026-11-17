@@ -8,3 +8,5 @@ A channel has `Q = Qground - Ex`. Nonpositive Q is closed. With known parent and
 
 References: [Denisov and Khudenko, Atomic Data and Nuclear Data Tables 95 (2009)](https://kinr.kyiv.ua/data/departments/NStrD/Denisov/Denisov-Khudenko-ADNDT95-815.pdf) discusses deformed radii, barriers, and alpha-decay calculations; [deformed two-potential calculation, Chinese Physics C](https://cpc.ihep.ac.cn/article/doi/10.1088/1674-1137/ae0430) describes angle-dependent WKB penetrability. These sources motivate the approximation; the uniform-charge overlap prescription and numerical thresholds here are implementation choices.
 
+
+If a channel is unresolved or its barrier calculation fails, branching fractions are absent for the entire set because the denominator is incomplete. With no alpha rate, conditional alpha branches are undefined; an explicitly supplied positive competing rate still permits zero overall branches for closed or zero-rate channels.
