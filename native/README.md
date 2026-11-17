@@ -24,4 +24,38 @@ The fields `schema_version`, `parent_z`, `parent_a`, and `l` require JSON intege
 
 Run `AlphaDecay --credits` to display the embedded dependency license notices, including the ProggyClean font copyright and MIT license. Release packages also include `CREDITS.md`. Linux executables require system OpenGL and X11 runtime libraries. Dear ImGui's built-in font is compiled into the executable.
 
+<<<<<<< HEAD
 Numerov is built by default and requires Rust/Cargo 1.75 or later. Configure with `-DALPHA_ENABLE_NUMEROV=OFF` only for builds that do not need the independent solver. Run the registered `numerov-abi` and `numerov-rust` CTest cases to verify the C interface and solver.
+=======
+## Spherical potential alternatives
+
+The default `potential_model` is `external`, the original Coulomb plus physical
+centrifugal exterior model. Set it to `square_well` or `woods_saxon` to use a
+finite charged sphere and an attractive nuclear potential. For example:
+
+```json
+{"schema_version":1,"parent_z":52,"parent_a":104,"q_mev":5.23,"l":0,"radius_fm":9,"preformation":0.1,"assault_hz":1e21,"potential_model":"woods_saxon","nuclear_depth_mev":100,"nuclear_radius_fm":9,"diffuseness_fm":0.65,"charge_radius_fm":9,"centrifugal_convention":"physical"}
+```
+
+The nuclear depth defaults to 100 MeV, the nuclear and charge radii default
+to `radius_fm`, and diffuseness defaults to 0.65 fm. These are adjustable
+illustrative assumptions, not fits. `centrifugal_convention` is `physical`
+(default) or `langer_wkb`; the latter is a named WKB approximation. Alternative
+responses contain `status`, `message`, `action`, inner and outer turning points,
+`log10_penetrability` and `log10_half_life_s`; unavailable numbers are JSON
+null. `zero_preformation` has a null half-life, and `closed_barrier` reports
+zero Q. The solver reports `above_barrier`, `no_pocket`, `unsupported_topology`
+or `numerical_error` instead of inventing a tunneling lifetime. For regular
+inputs `external_reference` contains the original external-barrier calculation;
+its Qi/Ren estimates are independent comparisons. With zero preformation or Q,
+the external reference is omitted. Unsupported parameter values return a JSON
+error and nonzero exit status. The viewer exposes the same potential parameters
+and playback uses the selected model; sources and historical limits are in the
+expandable provenance section.
+
+For deterministic screenshots, append an optional `external`, `square_well`,
+or `woods_saxon` argument after the preview width and height. See
+[the scientific notes](../docs/spherical-models.md) for model assumptions,
+Te-104 source distinctions and numerical scope.
+>>>>>>> potentials
+
