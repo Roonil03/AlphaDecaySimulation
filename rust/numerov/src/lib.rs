@@ -47,25 +47,26 @@ fn outgoing(rho:f64,eta:f64,l:i32)->Option<C> {
 fn solve_once(p:&Request, step:f64, outer:f64)->Option<f64> {
     let k=(2.0*p.reduced_mass_mev*p.q_mev).sqrt()/HBAR;
     let eta=p.reduced_mass_mev*(2.0*p.daughter_z*E2)/(HBAR*HBAR*k);
-    let n=((outer-p.lead_radius_fm)/step).ceil() as usize;
-    if n<4 || n>5_000_000 {return None}
-    let h=(outer-p.lead_radius_fm)/(n as f64);
-    let f=|r:f64| 2.0*p.reduced_mass_mev*(potential(p,r)-p.q_mev)/(HBAR*HBAR);
-    // At matching radius the residual nuclear tail must be negligible.
     if p.kind==1 && p.depth_mev/(1.0+((outer-p.radius_fm)/p.diffuseness_fm).exp())>1e-12*p.q_mev {return None}
     if outer<=p.charge_radius_fm.max(p.radius_fm) {return None}
-    let mut yp=outgoing(k*outer,eta,p.l)?; let mut y=outgoing(k*(outer-h),eta,p.l)?;
+    let kin=(2.0*p.reduced_mass_mev*(p.q_mev-potential(p,p.lead_radius_fm))).sqrt()/HBAR;
+    propagate(p.lead_radius_fm,outer,step,k,kin,|r|2.0*p.reduced_mass_mev*(potential(p,r)-p.q_mev)/(HBAR*HBAR),|r|outgoing(k*r,eta,p.l))
+}
+fn propagate<F:Fn(f64)->f64,G:Fn(f64)->Option<C>>(inner:f64,outer:f64,step:f64,k:f64,kin:f64,f:F,boundary:G)->Option<f64> {
+    let n=((outer-inner)/step).ceil() as usize;
+    if n<4 || n>5_000_000 {return None}
+    let h=(outer-inner)/(n as f64);
+    let mut yp=boundary(outer)?; let mut y=boundary(outer-h)?;
     let mut log_scale=0.0; let mut last=[C::default();5];
     for j in (0..=n-2).rev() {
-        let r=p.lead_radius_fm+(j as f64)*h;
+        let r=inner+(j as f64)*h;
         let ym=(y*(2.0*(1.0+5.0*h*h*f(r+h)/12.0))-yp*(1.0-h*h*f(r+2.0*h)/12.0))/(1.0-h*h*f(r)/12.0);
         yp=y; y=ym;
         let magnitude=y.abs().max(yp.abs());
-        if magnitude>1e100 { y=y/1e100; yp=yp/1e100; log_scale+=100.0*LN_10; }
+        if magnitude>1e100 { y=y/1e100; yp=yp/1e100; for v in &mut last {*v=*v/1e100;} log_scale+=100.0*LN_10; }
         if j<5 {last[j]=y;}
     }
     let deriv=(last[0]*(-25.0)+last[1]*48.0-last[2]*36.0+last[3]*16.0-last[4]*3.0)/(12.0*h);
-    let kin=(2.0*p.reduced_mass_mev*(p.q_mev-potential(p,p.lead_radius_fm))).sqrt()/HBAR;
     let inc=(last[0]+C::new(deriv.im/kin,-deriv.re/kin))*0.5;
     let answer=((k/kin).ln()-2.0*(inc.abs().ln()+log_scale))/LN_10;
     if answer.is_finite() {Some(answer)} else {None}
@@ -103,6 +104,16 @@ mod tests {
         let exact=(4.0*k*ki/(k+ki).powi(2)).log10();
         assert!((t-exact).abs()<1e-5,"{t} versus {exact}");
     }
+    #[test] fn rectangular_barrier_and_extreme_tunneling() {
+        for &(height,width,h) in &[(4.0_f64,2.0_f64,0.0002_f64),(4.0,500.0,0.005)] {
+            let k=1.0_f64; let kap=(height-k*k).sqrt(); let outer=width+2.0;
+            let f=|r:f64| {if r>1.0+1e-10 && r<1.0+width-1e-10 {height-k*k} else if (r-1.0).abs()<1e-10 || (r-1.0-width).abs()<1e-10 {height/2.0-k*k} else {-k*k}};
+            let got=propagate(0.0,outer,h,k,k,f,|r|Some(C::new(r.cos(),r.sin()))).unwrap();
+            let x=kap*width; let ls=if x>20.0 {x-2.0_f64.ln()} else {x.sinh().ln()}; let lt=(height*height/(4.0*k*k*kap*kap)).ln()+2.0*ls; let exact=-(if lt>40.0 {lt} else {(1.0+lt.exp()).ln()})/LN_10;
+            let tolerance=if width>10.0 {0.01} else {1e-5}; assert!((got-exact).abs()<tolerance,"{got} vs {exact}"); if width>10.0 {assert!(got < -308.0);}
+        }
+    }
+
     #[test] fn invalid_inputs_and_null_pointers() {
         let mut p=fixture(); p.q_mev=-1.0; assert_eq!(calculate(&p).status,2);
         let mut out=result(0,""); unsafe { assert_eq!(alpha_numerov_solve(std::ptr::null(),&mut out),-1); assert_eq!(alpha_numerov_solve(&p,std::ptr::null_mut()),-1); assert_eq!(alpha_numerov_solve(&p,&mut out),0); } assert_eq!(out.status,2);
@@ -112,3 +123,5 @@ mod tests {
         let r=calculate(&p); assert!(r.status<=1,"{}",String::from_utf8_lossy(&r.message)); assert!(r.match_error_decades<1e-4,"{}",r.match_error_decades);
     }
 }
+
+
