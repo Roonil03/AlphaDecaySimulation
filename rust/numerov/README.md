@@ -1,0 +1,3 @@
+# Independent Numerov solver
+
+The Rust static library exposes a versioned, caller-owned C ABI. It solves the physical radial equation at supplied Q, with its own potential implementation. The inner boundary is a constant-potential allowed lead beginning at the supplied lead radius; its incident flux is matched to a unit outgoing Coulomb wave. The result is transmission through that specified open system, not a resonance width. Lead-radius sensitivity is a model assumption and should be examined. No fitted preformation is introduced; if converted to a lifetime, use the same explicit assault frequency and preformation factor as the WKB comparison.
