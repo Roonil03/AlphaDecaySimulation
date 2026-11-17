@@ -1,4 +1,5 @@
 #include "alpha/core.hpp"
+#include "alpha/spherical_wkb.hpp"
 #include "embedded.hpp"
 #include "viewer.hpp"
 #include <algorithm>
@@ -37,7 +38,10 @@ static alpha::Request parse(const json &j) {
                                          "preformation",
                                          "assault_hz",
                                          "research_model",
-                                         "parent_binding_mev"};
+                                         "parent_binding_mev", "potential_model",
+                                         "nuclear_depth_mev", "nuclear_radius_fm",
+                                         "diffuseness_fm", "charge_radius_fm",
+                                         "centrifugal_convention"};
   if (!j.is_object())
     throw std::invalid_argument("request must be an object");
   for (auto it = j.begin(); it != j.end(); ++it)
@@ -69,13 +73,57 @@ static json serialize(const alpha::Result &r) {
     j["shell_log10_half_life_s"] = *r.shell_log10_half_life_s;
   return j;
 }
+static json run_request(const json &j) {
+  auto p = parse(j);
+  const auto model = j.value("potential_model", std::string("external"));
+  if (model == "external") {
+    for (const char *key : {"nuclear_depth_mev", "nuclear_radius_fm", "diffuseness_fm", "charge_radius_fm", "centrifugal_convention"})
+      if (j.contains(key)) throw std::invalid_argument(std::string(key) + " requires a spherical potential model");
+    return serialize(alpha::calculate(p));
+  }
+  if (model != "square_well" && model != "woods_saxon")
+    throw std::invalid_argument("unknown potential_model");
+  // Reuse the legacy domain checks, but allow the alternative solver's explicit
+  // zero-energy and zero-preformation statuses.
+  if (!std::isfinite(p.q_mev) || p.q_mev < 0 || p.q_mev > 100 ||
+      !std::isfinite(p.preformation) || p.preformation < 0 || p.preformation > 1)
+    throw std::invalid_argument("input outside supported domain");
+  auto checked = p;
+  if (checked.q_mev < .01) checked.q_mev = .01;
+  if (checked.preformation == 0) checked.preformation = 1;
+  const auto reference = alpha::calculate(checked);
+  alpha::SphericalWkbRequest input;
+  auto &v = input.potential;
+  v.kind = model == "square_well" ? alpha::PotentialKind::square_well : alpha::PotentialKind::woods_saxon;
+  v.daughter_z = p.parent_z - 2;
+  v.reduced_mass_mev = 931.49410242 * 4.0 * (p.parent_a - 4.0) / p.parent_a;
+  v.l = p.l;
+  v.nuclear_depth_mev = j.value("nuclear_depth_mev", 100.0);
+  v.nuclear_radius_fm = j.value("nuclear_radius_fm", p.radius_fm);
+  v.diffuseness_fm = j.value("diffuseness_fm", .65);
+  v.charge_radius_fm = j.value("charge_radius_fm", p.radius_fm);
+  const auto convention = j.value("centrifugal_convention", std::string("physical"));
+  if (convention == "langer_wkb") v.centrifugal = alpha::CentrifugalConvention::langer_wkb;
+  else if (convention != "physical") throw std::invalid_argument("unknown centrifugal_convention");
+  input.q_mev=p.q_mev; input.preformation=p.preformation; input.assault_hz=p.assault_hz;
+  auto r=alpha::calculate_spherical_wkb(input);
+  if (r.status == "invalid_input") throw std::invalid_argument(r.message);
+  json out={{"schema_version",1},{"potential_model",model},{"centrifugal_convention",convention},
+            {"status",r.status},{"message",r.message}};
+  const auto put=[&](const char *key, const std::optional<double>& x) { out[key]=x ? json(*x) : json(nullptr); };
+  put("inner_turning_fm",r.inner_turning_fm); put("outer_turning_fm",r.outer_turning_fm);
+  put("action",r.action); put("log10_penetrability",r.log10_penetrability); put("log10_half_life_s",r.log10_half_life_s);
+  // Only present a reference for the actual input, never a substituted status check.
+  if (p.q_mev >= .01 && p.preformation > 0) out["external_reference"] = serialize(reference);
+  return out;
+}
 static void check(bool b, const std::string &what) {
   if (!b)
     throw std::runtime_error(what);
 }
 static void self_test() {
   auto catalog = json::parse(embedded::catalog);
-  check(catalog.size() == 15, "catalog size");
+  check(catalog.size() == 16, "catalog size");
   int count = 0;
   for (auto data : {embedded::validation, embedded::holdout}) {
     auto report = json::parse(data);
@@ -131,7 +179,7 @@ int main(int argc, char **argv) {
     if (argc == 2 && std::string(argv[1]) == "--run") {
       json j;
       std::cin >> j;
-      std::cout << serialize(alpha::calculate(parse(j))).dump() << '\n';
+      std::cout << run_request(j).dump() << '\n';
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--self-test") {
