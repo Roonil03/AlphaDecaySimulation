@@ -6,3 +6,8 @@ __pycache__/
 /dist/
 /desktop/*.exe
 /preview*.png
+
+build-deps/
+build/
+
+imgui.ini
