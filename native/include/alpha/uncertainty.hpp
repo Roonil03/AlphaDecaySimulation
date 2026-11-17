@@ -1,0 +1,25 @@
+#pragma once
+#include "alpha/spherical_wkb.hpp"
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <string>
+namespace alpha {
+// Gaussian parameter order: Q, depth, nuclear radius, diffuseness. Covariance
+// has squared units and must be symmetric positive semidefinite.
+struct UncertaintyRequest {
+    SphericalWkbRequest baseline;
+    std::array<double,4> standard_deviations{};
+    std::optional<std::array<double,16>> covariance;
+    std::uint64_t seed = 1;
+    std::size_t draws = 1000;
+};
+struct UncertaintyResult {
+    std::string status, message;
+    std::size_t accepted = 0, rejected = 0;
+    std::optional<double> log10_half_life_p16, log10_half_life_p50, log10_half_life_p84;
+    bool assumed_independent = false;
+};
+UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest&);
+}
