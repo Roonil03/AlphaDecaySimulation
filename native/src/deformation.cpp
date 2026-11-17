@@ -25,3 +25,37 @@ double deformed_coulomb(const SphericalPotential& p,Deformation d,double r,doubl
  return 3*2*p.daughter_z*e2*sum/(R*R*R);
 }
 }
+namespace alpha {
+DeformedWkbResult calculate_deformed_wkb(const SphericalWkbRequest& req, Deformation d) {
+ DeformedWkbResult out;
+ try {
+  validate(d);
+  if(d.beta2==0&&d.beta4==0) { auto s=calculate_spherical_wkb(req); out.status=s.status; out.message=s.message; out.log10_penetrability=s.log10_penetrability; out.log10_half_life_s=s.log10_half_life_s; out.angular_points=1; return out; }
+  // Compare independent multipole truncations at several physically relevant points.
+  for(double x: {0.0,0.5,1.0}) for(double r: {req.potential.charge_radius_fm,1.5*req.potential.charge_radius_fm,3*req.potential.charge_radius_fm}) out.coulomb_error_mev=std::max(out.coulomb_error_mev,std::abs(deformed_coulomb(req.potential,d,r,x,24,256)-deformed_coulomb(req.potential,d,r,x,32,512)));
+  out.multipole_order=24;
+  auto average=[&](int n) {
+   double maxlog=-INFINITY, sum=0;
+   for(int i=0;i<n;i++) {
+    // Gauss-Legendre nodes on [0,1].
+    double z=std::cos(pi*(i+0.75)/(n+0.5)), last, deriv=0;
+    do { double p0=1,p1=z; for(int k=2;k<=n;k++){double p=((2*k-1)*z*p1-(k-1)*p0)/k;p0=p1;p1=p;} deriv=n*(z*p1-p0)/(z*z-1); last=z; z=last-p1/deriv; } while(std::abs(z-last)>1e-14);
+    double x=(z+1)/2, weight=1/((1-z*z)*deriv*deriv);
+    auto p=req.potential; p.nuclear_radius_fm=deformed_radius(p.nuclear_radius_fm,d,x);
+    auto f=[&](double r){return nuclear_potential(p,r)+deformed_coulomb(p,d,r,x,24,256)+centrifugal_potential(p,r);};
+    auto result=calculate_radial_wkb(req,f,p.nuclear_radius_fm);
+    if(!result.log10_penetrability) throw std::runtime_error("An orientation has no supported barrier: "+result.status);
+    double v=*result.log10_penetrability+std::log10(weight);
+    if(v>maxlog){sum=std::isfinite(maxlog)?sum*std::pow(10.0,maxlog-v)+1:1; maxlog=v;} else sum+=std::pow(10.0,v-maxlog);
+   }
+   return maxlog+std::log10(sum);
+  };
+  double prior=average(8), value=prior;
+  for(int n: {16,32,64}) { value=average(n); out.angular_points=n; out.angular_error_log10=std::abs(value-prior); if(out.angular_error_log10<1e-4) break; prior=value; }
+  if(out.angular_error_log10>=1e-4 || out.coulomb_error_mev>0.01) {out.status="numerical_error"; out.message="Angular or Coulomb multipole convergence threshold not met."; return out;}
+  out.log10_penetrability=value; out.status=req.preformation==0?"zero_preformation":"ok";
+  if(req.preformation>0) out.log10_half_life_s=std::log10(std::log(2.0))-std::log10(req.assault_hz)-std::log10(req.preformation)-value;
+  return out;
+ } catch(const std::exception& e) { out.status="invalid_or_numerical_error"; out.message=e.what(); return out; }
+}
+}
