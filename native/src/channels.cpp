@@ -33,8 +33,8 @@ std::vector<ChannelRate> channel_rates(const std::vector<ChannelInput>& cs, cons
         auto& r=out[i]; r.status=selections[i].status;
         if (!std::isfinite(cs[i].preformation) || cs[i].preformation<0 || cs[i].preformation>1 || !std::isfinite(cs[i].assault_hz) || cs[i].assault_hz<=0 || (logp[i] && (!std::isfinite(*logp[i]) || *logp[i]>0))) throw std::invalid_argument("Invalid rate parameters");
         if (r.status!="ok") continue;
-        if (!logp[i]) { r.status="numerical_error"; continue; }
         if (cs[i].preformation==0) { r.status="zero_preformation"; continue; }
+        if (!logp[i]) { r.status="numerical_error"; continue; }
         r.log10_rate_hz=std::log10(cs[i].preformation)+std::log10(cs[i].assault_hz)+*logp[i];
         r.log10_partial_half_life_s=std::log10(std::log(2.0))-*r.log10_rate_hz;
         maxlog=std::max(maxlog,*r.log10_rate_hz);

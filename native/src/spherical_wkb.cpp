@@ -46,8 +46,9 @@ SphericalWkbResult calculate_radial_wkb(const SphericalWkbRequest& req, const st
     if (req.q_mev == 0) return fail("closed_barrier", "Zero decay energy has no finite outer Coulomb turning point.");
     const auto f=[&](double r){return potential(r)-req.q_mev;};
     // Fine scan through the nuclear region, then exponentially spaced exterior samples.
-    const double end=std::max(p.charge_radius_fm, p.nuclear_radius_fm+40*p.diffuseness_fm);
-    const double step=std::min(0.02, p.diffuseness_fm/16);
+    const bool diffuse=p.kind==PotentialKind::woods_saxon;
+    const double end=std::max(p.charge_radius_fm, p.nuclear_radius_fm+(diffuse ? 40*p.diffuseness_fm : 0));
+    const double step=diffuse ? std::min(0.02, p.diffuseness_fm/16) : 0.02;
     if (!finite(end) || end/step > 1000000) return fail("unsupported_topology", "Potential scale exceeds scan limit.");
     std::vector<Edge> edges;
     double previous=std::min(1e-8,step/100), y=f(previous);

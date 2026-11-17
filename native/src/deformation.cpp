@@ -39,7 +39,8 @@ DeformedWkbResult calculate_deformed_wkb(const SphericalWkbRequest& req, Deforma
   for(double x: {0.0,0.5,1.0}) for(double r: {req.potential.charge_radius_fm,1.5*req.potential.charge_radius_fm,3*req.potential.charge_radius_fm}) out.coulomb_error_mev=std::max(out.coulomb_error_mev,std::abs(deformed_coulomb(req.potential,d,r,x,24,256)-deformed_coulomb(req.potential,d,r,x,32,512)));
   // Construct independent refinements of multipole order, source quadrature,
   // and radial table spacing; compare their resulting penetrabilities.
-  const double boundary=std::max(req.potential.charge_radius_fm*3,req.potential.nuclear_radius_fm+40*req.potential.diffuseness_fm);
+  const double tail=req.potential.kind==PotentialKind::woods_saxon ? 40*req.potential.diffuseness_fm : 0;
+  const double boundary=std::max(req.potential.charge_radius_fm*3,req.potential.nuclear_radius_fm+tail);
   const double norm=normalization(d), R=req.potential.charge_radius_fm;
   using Row=std::array<double,17>;
   struct Table { double dr; int order; std::vector<Row> rows; };
@@ -71,7 +72,9 @@ DeformedWkbResult calculate_deformed_wkb(const SphericalWkbRequest& req, Deforma
       else {int j=static_cast<int>(r/dr);double t=r/dr-j;for(int k=0;k<=table.order/2;k++) c+=angle[k]*(table.rows[j][k]*(1-t)+table.rows[j+1][k]*t);}
       return nuclear_potential(p,r)+factor*c+centrifugal_potential(p,r);
     };
-    auto result=calculate_radial_wkb(req,f,p.nuclear_radius_fm);
+    auto oriented=req;
+    oriented.potential=p;
+    auto result=calculate_radial_wkb(oriented,f,p.nuclear_radius_fm);
     if(!result.log10_penetrability) throw std::runtime_error("An orientation has no supported barrier: "+result.status);
     double v=*result.log10_penetrability+std::log10(weight);
     if(v>maxlog){sum=std::isfinite(maxlog)?sum*std::pow(10.0,maxlog-v)+1:1; maxlog=v;} else sum+=std::pow(10.0,v-maxlog);

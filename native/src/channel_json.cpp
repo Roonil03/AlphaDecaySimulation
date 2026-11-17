@@ -34,7 +34,10 @@ json run_channels(const json& input,const alpha::SphericalWkbRequest& base, cons
   if(selection.status=="ok") {
    auto req=base; req.q_mev=selection.q_mev; req.potential.l=*selection.l; req.preformation=c.preformation; req.assault_hz=c.assault_hz;
    auto r=alpha::calculate_deformed_wkb(req,d,cancelled); if(r.status=="cancelled") throw std::runtime_error("cancelled"); row["barrier_status"]=r.status; row["barrier_message"]=r.message; row["angular_error_log10"]=r.angular_error_log10; row["charge_error_log10"]=r.charge_error_log10; row["coulomb_error_mev"]=r.coulomb_error_mev; row["angular_points"]=r.angular_points; row["multipole_order"]=r.multipole_order;
-   logp=r.log10_penetrability; if(!logp) selection.status=r.status;
+   logp=r.log10_penetrability;
+   // A valid zero formation factor determines the rate independently of a
+   // failed barrier diagnostic. Keep malformed potential inputs unavailable.
+   if(!logp && (c.preformation!=0 || r.status=="invalid_input")) selection.status=r.status;
   }
   row["log10_penetrability"]=opt(logp); rows.push_back(row); cs.push_back(c); selections.push_back(selection); logs.push_back(logp);
  }
