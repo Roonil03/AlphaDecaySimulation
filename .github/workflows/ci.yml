@@ -32,9 +32,10 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force package | Out-Null
           Copy-Item build/Release/AlphaDecay.exe package/
+          Copy-Item CREDITS.md package/
       - name: Package Linux executable
         if: runner.os == 'Linux'
-        run: mkdir package && cp build/AlphaDecay package/
+        run: mkdir package && cp build/AlphaDecay CREDITS.md package/
       - uses: actions/upload-artifact@v4
         with:
           name: AlphaDecay-${{ runner.os }}

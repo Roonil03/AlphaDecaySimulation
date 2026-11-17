@@ -20,4 +20,6 @@ Run `AlphaDecay` for the viewer, `AlphaDecay --self-test` for embedded numerical
 
 The result contains `schema_version`, `log10_half_life_s`, `log10_penetrability`, and `outer_turning_fm`. `research_log10_half_life_s` and `shell_log10_half_life_s` are present only when applicable. Unknown fields and unsupported versions are rejected. See the kernel README for model definitions, bounds and limitations. Measured partial half-lives apply only to an exact catalog Z/A/Q/l match. The viewer's population illustrates independent survival for one channel, excluding competing branches. The models do not estimate prediction uncertainty.
 
-Run `AlphaDecay --credits` to display the embedded dependency license notices. Linux executables require system OpenGL and X11 runtime libraries. Dear ImGui's built-in font is compiled into the executable.
+The fields `schema_version`, `parent_z`, `parent_a`, and `l` require JSON integers within the C++ `int` range; floating-point values, including `1.0`, are rejected before conversion. The supported physical bounds still apply.
+
+Run `AlphaDecay --credits` to display the embedded dependency license notices, including the ProggyClean font copyright and MIT license. Release packages also include `CREDITS.md`. Linux executables require system OpenGL and X11 runtime libraries. Dear ImGui's built-in font is compiled into the executable.

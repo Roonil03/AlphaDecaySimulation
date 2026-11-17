@@ -4,10 +4,28 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <nlohmann/json.hpp>
 #include <set>
 #include <string>
 using json = nlohmann::json;
+
+static int integer_field(const json &j, const char *name) {
+  const auto &value = j.at(name);
+  const std::string error = std::string(name) + " must be an integer in int range";
+  if (value.is_number_unsigned()) {
+    const auto n = value.get<json::number_unsigned_t>();
+    if (n > static_cast<json::number_unsigned_t>(std::numeric_limits<int>::max()))
+      throw std::invalid_argument(error);
+    return static_cast<int>(n);
+  }
+  if (!value.is_number_integer())
+    throw std::invalid_argument(error);
+  const auto n = value.get<json::number_integer_t>();
+  if (n < std::numeric_limits<int>::min() || n > std::numeric_limits<int>::max())
+    throw std::invalid_argument(error);
+  return static_cast<int>(n);
+}
 
 static alpha::Request parse(const json &j) {
   const std::set<std::string> allowed = {"schema_version",
@@ -25,13 +43,13 @@ static alpha::Request parse(const json &j) {
   for (auto it = j.begin(); it != j.end(); ++it)
     if (!allowed.contains(it.key()))
       throw std::invalid_argument("unknown field: " + it.key());
-  if (j.at("schema_version").get<int>() != 1)
+  if (integer_field(j, "schema_version") != 1)
     throw std::invalid_argument("unsupported schema_version");
   alpha::Request p;
-  p.parent_z = j.at("parent_z").get<int>();
-  p.parent_a = j.at("parent_a").get<int>();
+  p.parent_z = integer_field(j, "parent_z");
+  p.parent_a = integer_field(j, "parent_a");
   p.q_mev = j.at("q_mev").get<double>();
-  p.l = j.at("l").get<int>();
+  p.l = integer_field(j, "l");
   p.radius_fm = j.at("radius_fm").get<double>();
   p.preformation = j.at("preformation").get<double>();
   p.assault_hz = j.at("assault_hz").get<double>();
@@ -125,7 +143,8 @@ int main(int argc, char **argv) {
                 << embedded::glfw_license << "\nDear ImGui\n"
                 << embedded::imgui_license << "\nnlohmann/json\n"
                 << embedded::json_license << "\nKhronos OpenGL definitions\n"
-                << embedded::khronos_license << '\n';
+                << embedded::khronos_license << "\nProggyClean font\n"
+                << embedded::proggyclean_license << '\n';
       return 0;
     }
     return viewer(argc, argv);

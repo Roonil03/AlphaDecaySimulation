@@ -39,5 +39,33 @@ class Contract(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(json.loads(proc.stdout)['log10_penetrability'], 0.0)
 
+    def test_integer_fields_reject_conversion_and_overflow(self):
+        for field in ('schema_version', 'parent_z', 'parent_a', 'l'):
+            for value in (BASE[field] + 0.9, float(BASE[field]), True, str(BASE[field]),
+                          BASE[field] + 2**32, BASE[field] - 2**32,
+                          2**63, 2**64 - 1, -(2**63), -(2**64)):
+                with self.subTest(field=field, value=value):
+                    proc = self.run_request(BASE | {field: value})
+                    self.assertNotEqual(proc.returncode, 0)
+                    self.assertIn(field, json.loads(proc.stderr)['error'])
+        proc = self.run_request(BASE | {'l': -0.9})
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn('l', json.loads(proc.stderr)['error'])
+
+    def test_supported_integer_bounds(self):
+        for change in ({'parent_z': 3, 'parent_a': 5},
+                       {'parent_z': 130, 'parent_a': 400, 'l': 100}):
+            with self.subTest(change=change):
+                proc = self.run_request(BASE | change)
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_embedded_font_notice(self):
+        proc = subprocess.run([EXE, '--credits'], text=True, capture_output=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn('ProggyClean.ttf', proc.stdout)
+        self.assertIn('Copyright (c) 2004, 2005 Tristan Grimmer', proc.stdout)
+        self.assertIn('The above copyright notice and this permission notice shall be included',
+                      proc.stdout)
+
 if __name__ == '__main__':
     unittest.main()
