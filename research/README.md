@@ -12,10 +12,11 @@ Requires Elixir 1.14+, Erlang and a compiled Go scheduler. Linux also requires `
 
 ## Analysis
 
-Create a Python 3.10+ virtual environment, install `pip install -r research/python/requirements.txt`, and run `python research/python/fit.py research/python/data/example-v1.json --core /absolute/alpha-core --output fit.json --plot fit.png`. The sample is illustrative. Replace it with a versioned, sourced dataset and predeclare calibration/validation membership. The analysis fits only a common preformation factor in (0,1], holding assault frequency at 1e21 Hz, and calls the native core at unit preformation for every case. Validation cases do not affect the fitted factor. `python -m unittest` from `research/python` tests the split and normalization.
+Create a Python 3.10+ virtual environment, install `pip install -r research/python/requirements.txt`, and run `python research/python/fit.py research/python/data/example-v1.json --core /absolute/alpha-core --output fit.json --plot fit.png`. To prepare a pre-split CSV, run `python research/python/prepare.py input.csv --version DATASET_VERSION --source CITATION --output dataset.json`; its columns are `id,split,log10_half_life_s,parent_z,parent_a,q_mev,l,radius_fm`. The sample is illustrative. Replace it with a versioned, sourced dataset and predeclare calibration/validation membership. The analysis fits only a common preformation factor in (0,1], holding assault frequency at 1e21 Hz, and calls the native core at unit preformation for every case. Validation cases do not affect the fitted factor. `python -m unittest` from `research/python` tests the split and normalization.
 
 ## Proofs and design
 
 In `research/lean`, `lake exe cache get && lake build` uses the pinned Lean/mathlib versions. Proofs concern mathematical conditions, not the accuracy of floating-point calculations or nuclear-model assumptions. The Astro language sketch and separate runnable campaign are described in `astro/README.md`.
+
 
 
