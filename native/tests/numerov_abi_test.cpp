@@ -1,6 +1,7 @@
 #include "alpha_numerov.h"
 #include <cmath>
 #include <stdexcept>
+static int32_t cancelled(void*) { return 1; }
 int main() {
     alpha_numerov_request req{};
     req.version=1; req.kind=0; req.reduced_mass_mev=3657; req.q_mev=5;
@@ -11,4 +12,7 @@ int main() {
         throw std::runtime_error("null pointer handling");
     if (alpha_numerov_solve(&req,&out)!=0 || out.version!=1 || out.status!=0 || std::abs(out.log10_transmission)>=1e-5)
         throw std::runtime_error("free transmission or ABI result");
+    if (alpha_numerov_solve_cancelable(&req,&out,cancelled,nullptr)!=0 || out.status!=4)
+        throw std::runtime_error("cancellation status");
 }
+

@@ -11,14 +11,20 @@ typedef struct {
     double lead_radius_fm, match_radius_fm, step_fm;
 } alpha_numerov_request;
 typedef struct {
-    uint32_t version, status; /* 0 converged, 1 unconverged, 2 invalid, 3 numerical failure */
+    uint32_t version, status; /* 0 converged, 1 unconverged, 2 invalid, 3 numerical failure, 4 cancelled */
     double log10_transmission, step_error_decades, match_error_decades;
     char message[192];
 } alpha_numerov_result;
 /* Caller owns both structs. Returns 0 if a result was written, -1 for null pointers.
    No allocation crosses the ABI; no Rust unwind crosses it. */
 int32_t alpha_numerov_solve(const alpha_numerov_request*, alpha_numerov_result*);
+/* Callback returns nonzero to cancel. It must not throw and context must remain
+   valid until return. Once set, cancellation must remain set until return. Callback may be null; cancellation is cooperative. */
+typedef int32_t (*alpha_numerov_cancel_fn)(void* context);
+int32_t alpha_numerov_solve_cancelable(const alpha_numerov_request*, alpha_numerov_result*, alpha_numerov_cancel_fn, void* context);
 #ifdef __cplusplus
 }
 #endif
 #endif
+
+

@@ -44,21 +44,22 @@ fn outgoing(rho:f64,eta:f64,l:i32)->Option<C> {
     }
     let phase=rho-eta*(2.0*rho).ln(); Some(sum*C::new(phase.cos(),phase.sin()))
 }
-fn solve_once(p:&Request, step:f64, outer:f64)->Option<f64> {
+fn solve_once(p:&Request, step:f64, outer:f64, cancel:&dyn Fn()->bool)->Option<f64> {
     let k=(2.0*p.reduced_mass_mev*p.q_mev).sqrt()/HBAR;
     let eta=p.reduced_mass_mev*(2.0*p.daughter_z*E2)/(HBAR*HBAR*k);
     if p.kind==1 && p.depth_mev/(1.0+((outer-p.radius_fm)/p.diffuseness_fm).exp())>1e-12*p.q_mev {return None}
     if outer<=p.charge_radius_fm.max(p.radius_fm) {return None}
     let kin=(2.0*p.reduced_mass_mev*(p.q_mev-potential(p,p.lead_radius_fm))).sqrt()/HBAR;
-    propagate(p.lead_radius_fm,outer,step,k,kin,|r|2.0*p.reduced_mass_mev*(potential(p,r)-p.q_mev)/(HBAR*HBAR),|r|outgoing(k*r,eta,p.l))
+    propagate(p.lead_radius_fm,outer,step,k,kin,|r|2.0*p.reduced_mass_mev*(potential(p,r)-p.q_mev)/(HBAR*HBAR),|r|outgoing(k*r,eta,p.l),cancel)
 }
-fn propagate<F:Fn(f64)->f64,G:Fn(f64)->Option<C>>(inner:f64,outer:f64,step:f64,k:f64,kin:f64,f:F,boundary:G)->Option<f64> {
+fn propagate<F:Fn(f64)->f64,G:Fn(f64)->Option<C>>(inner:f64,outer:f64,step:f64,k:f64,kin:f64,f:F,boundary:G,cancel:&dyn Fn()->bool)->Option<f64> {
     let n=((outer-inner)/step).ceil() as usize;
     if n<4 || n>5_000_000 {return None}
     let h=(outer-inner)/(n as f64);
     let mut yp=boundary(outer)?; let mut y=boundary(outer-h)?;
     let mut log_scale=0.0; let mut last=[C::default();5];
     for j in (0..=n-2).rev() {
+        if j % 4096 == 0 && cancel() {return None}
         let r=inner+(j as f64)*h;
         let ym=(y*(2.0*(1.0+5.0*h*h*f(r+h)/12.0))-yp*(1.0-h*h*f(r+2.0*h)/12.0))/(1.0-h*h*f(r)/12.0);
         yp=y; y=ym;
@@ -75,21 +76,30 @@ fn result(status:u32, msg:&str)->ResultPod {
     let mut r=ResultPod {version:1,status,log10_transmission:f64::NAN,step_error_decades:f64::NAN,match_error_decades:f64::NAN,message:[0;192]};
     let b=msg.as_bytes(); let n=b.len().min(191); r.message[..n].copy_from_slice(&b[..n]); r
 }
-fn calculate(p:&Request)->ResultPod {
+fn calculate_with_cancel(p:&Request,cancel:&dyn Fn()->bool)->ResultPod {
     if !valid(p) {return result(2,"Invalid request or inner lead is not classically allowed");}
-    let (a,b,c,d)=match (solve_once(p,p.step_fm,p.match_radius_fm),solve_once(p,p.step_fm/2.0,p.match_radius_fm),solve_once(p,p.step_fm/4.0,p.match_radius_fm),solve_once(p,p.step_fm/4.0,2.0*p.match_radius_fm)) {
-        (Some(a),Some(b),Some(c),Some(d))=>(a,b,c,d), _=>return result(3,"Numerical limit, invalid exterior, or Coulomb asymptotic series did not converge")
+    let (a,b,c,d)=match (solve_once(p,p.step_fm,p.match_radius_fm,cancel),solve_once(p,p.step_fm/2.0,p.match_radius_fm,cancel),solve_once(p,p.step_fm/4.0,p.match_radius_fm,cancel),solve_once(p,p.step_fm/4.0,2.0*p.match_radius_fm,cancel)) {
+        (Some(a),Some(b),Some(c),Some(d))=>(a,b,c,d), _=>return if cancel() {result(4,"Cancelled")} else {result(3,"Numerical limit, invalid exterior, or Coulomb asymptotic series did not converge")}
     };
     let step=(c-b).abs().max((b-a).abs()); let matching=(c-d).abs();
     let good=step<=1e-4 && matching<=1e-4 && c<=1e-6;
     let mut r=result(if good {0} else {1},if good {"Converged"} else {"Step or exterior matching did not converge"});
     r.log10_transmission=c; r.step_error_decades=step; r.match_error_decades=matching; r
 }
+fn calculate(p:&Request)->ResultPod { calculate_with_cancel(p,&|| false) }
 /// All non-null pointers must be aligned and valid for their respective POD structs.
 #[no_mangle]
 pub unsafe extern "C" fn alpha_numerov_solve(request:*const Request, output:*mut ResultPod)->i32 {
     if request.is_null() || output.is_null() {return -1}
     let r=std::panic::catch_unwind(|| calculate(&*request)).unwrap_or_else(|_|result(3,"Internal numerical failure"));
+    output.write(r); 0
+}
+/// The callback must not unwind and its context must remain valid until return.
+#[no_mangle]
+pub unsafe extern "C" fn alpha_numerov_solve_cancelable(request:*const Request, output:*mut ResultPod, callback:Option<unsafe extern "C" fn(*mut std::ffi::c_void)->i32>, context:*mut std::ffi::c_void)->i32 {
+    if request.is_null() || output.is_null() {return -1}
+    let cancel=|| callback.map_or(false,|f| unsafe {f(context)!=0});
+    let r=std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| calculate_with_cancel(&*request,&cancel))).unwrap_or_else(|_|result(3,"Internal numerical failure"));
     output.write(r); 0
 }
 #[cfg(test)]
@@ -99,7 +109,7 @@ mod tests {
     #[test] fn free_particle_transmission() { let p=fixture(); let r=calculate(&p); assert_eq!(r.status,0); assert!(r.log10_transmission.abs()<1e-5); }
     #[test] fn analytic_potential_step() {
         let mut p=fixture(); p.depth_mev=10.0;
-        let t=solve_once(&p,0.00005,20.0).unwrap();
+        let t=solve_once(&p,0.00005,20.0,&||false).unwrap();
         let k=p.q_mev.sqrt(); let ki=(p.q_mev+p.depth_mev).sqrt();
         let exact=(4.0*k*ki/(k+ki).powi(2)).log10();
         assert!((t-exact).abs()<1e-5,"{t} versus {exact}");
@@ -108,7 +118,7 @@ mod tests {
         for &(height,width,h) in &[(4.0_f64,2.0_f64,0.0002_f64),(4.0,500.0,0.005)] {
             let k=1.0_f64; let kap=(height-k*k).sqrt(); let outer=width+2.0;
             let f=|r:f64| {if r>1.0+1e-10 && r<1.0+width-1e-10 {height-k*k} else if (r-1.0).abs()<1e-10 || (r-1.0-width).abs()<1e-10 {height/2.0-k*k} else {-k*k}};
-            let got=propagate(0.0,outer,h,k,k,f,|r|Some(C::new(r.cos(),r.sin()))).unwrap();
+            let got=propagate(0.0,outer,h,k,k,f,|r|Some(C::new(r.cos(),r.sin())),&||false).unwrap();
             let x=kap*width; let ls=if x>20.0 {x-2.0_f64.ln()} else {x.sinh().ln()}; let lt=(height*height/(4.0*k*k*kap*kap)).ln()+2.0*ls; let exact=-(if lt>40.0 {lt} else {(1.0+lt.exp()).ln()})/LN_10;
             let tolerance=if width>10.0 {0.01} else {1e-5}; assert!((got-exact).abs()<tolerance,"{got} vs {exact}"); if width>10.0 {assert!(got < -308.0);}
         }
@@ -122,7 +132,7 @@ mod tests {
             (30.0,0,1.0,1.0,5000.0,-68.72760769330403),
         ] {
             let f=|r:f64| 2.0*eta/r+(l*(l+1)) as f64/(r*r)-1.0;
-            let actual=propagate(inner,outer,0.01,1.0,kin,f,|r|outgoing(r,eta,l)).unwrap();
+            let actual=propagate(inner,outer,0.01,1.0,kin,f,|r|outgoing(r,eta,l),&||false).unwrap();
             assert!((actual-expected).abs()<1e-5,"eta={eta}, l={l}: {actual} vs {expected}");
         }
     }
@@ -135,6 +145,7 @@ mod tests {
         let r=calculate(&p); assert!(r.status<=1,"{}",String::from_utf8_lossy(&r.message)); assert!(r.match_error_decades<1e-4,"{}",r.match_error_decades);
     }
 }
+
 
 
 
