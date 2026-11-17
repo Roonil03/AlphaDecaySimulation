@@ -32,3 +32,9 @@ predicted Qα = 5.42 ± 0.07 MeV and approximately 5 ns; that is a theoretical
 prediction, not an observation. The 100% alpha branch and binding energy are
 older evaluation inputs, not determinations from Cox et al. Upper limits and
 predictions must not be treated as equality references in MAE calculations.
+
+The [AME2020 unrounded mass table](https://www-nds.iaea.org/amdc/ame2020/mass_1.mas20.txt)
+row for `52 52 104 Te` lists binding energy per nucleon 8157.3256 ± 3.0539 keV,
+without the table's `#` estimated-value marker. Multiplying both values by
+104/1000 gives 848.3618624 ± 0.3176056 MeV. This older input is retained with
+its source and uncertainty; it is not a binding energy measured by Cox et al.
