@@ -70,3 +70,24 @@ fn solve_once(p:&Request, step:f64, outer:f64)->Option<f64> {
     let answer=((k/kin).ln()-2.0*(inc.abs().ln()+log_scale))/LN_10;
     if answer.is_finite() {Some(answer)} else {None}
 }
+fn result(status:u32, msg:&str)->ResultPod {
+    let mut r=ResultPod {version:1,status,log10_transmission:f64::NAN,step_error_decades:f64::NAN,match_error_decades:f64::NAN,message:[0;192]};
+    let b=msg.as_bytes(); let n=b.len().min(191); r.message[..n].copy_from_slice(&b[..n]); r
+}
+fn calculate(p:&Request)->ResultPod {
+    if !valid(p) {return result(2,"Invalid request or inner lead is not classically allowed");}
+    let (a,b,c,d)=match (solve_once(p,p.step_fm,p.match_radius_fm),solve_once(p,p.step_fm/2.0,p.match_radius_fm),solve_once(p,p.step_fm/4.0,p.match_radius_fm),solve_once(p,p.step_fm/4.0,2.0*p.match_radius_fm)) {
+        (Some(a),Some(b),Some(c),Some(d))=>(a,b,c,d), _=>return result(3,"Numerical limit, invalid exterior, or Coulomb asymptotic series did not converge")
+    };
+    let step=(c-b).abs().max((b-a).abs()); let matching=(c-d).abs();
+    let good=step<=1e-4 && matching<=1e-4 && c<=1e-6;
+    let mut r=result(if good {0} else {1},if good {"Converged"} else {"Step or exterior matching did not converge"});
+    r.log10_transmission=c; r.step_error_decades=step; r.match_error_decades=matching; r
+}
+/// All non-null pointers must be aligned and valid for their respective POD structs.
+#[no_mangle]
+pub unsafe extern "C" fn alpha_numerov_solve(request:*const Request, output:*mut ResultPod)->i32 {
+    if request.is_null() || output.is_null() {return -1}
+    let r=std::panic::catch_unwind(|| calculate(&*request)).unwrap_or_else(|_|result(3,"Internal numerical failure"));
+    output.write(r); 0
+}
