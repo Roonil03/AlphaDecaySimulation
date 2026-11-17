@@ -1,2 +1,2 @@
 #pragma once
-int viewer(int argc, char** argv);
+int viewer(int argc, char **argv);

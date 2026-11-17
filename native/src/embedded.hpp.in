@@ -2,5 +2,10 @@
 namespace embedded {
 inline constexpr const char* catalog = R"ALPHA(@CATALOG_JSON@)ALPHA";
 inline constexpr const char* validation = R"ALPHA(@VALIDATION_JSON@)ALPHA";
+inline constexpr const char* glfw_license = R"ALPHA(@GLFW_LICENSE@)ALPHA";
+inline constexpr const char* imgui_license = R"ALPHA(@IMGUI_LICENSE@)ALPHA";
+inline constexpr const char* json_license = R"ALPHA(@JSON_LICENSE@)ALPHA";
+inline constexpr const char* khronos_license = R"ALPHA(@KHRONOS_LICENSE@)ALPHA";
 inline constexpr const char* holdout = R"ALPHA(@HOLDOUT_JSON@)ALPHA";
 }
+
