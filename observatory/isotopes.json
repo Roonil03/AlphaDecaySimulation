@@ -198,4 +198,25 @@
     "binding_extrapolated": false,
     "branch_source_url": "https://www.nndc.bnl.gov/ensnds/222/Rn/a_decay.pdf"
   }
+,
+  {
+    "symbol": "Te", "z": 52, "a": 104, "q_mev": 5.23, "q_uncertainty_mev": 0.09,
+    "total_half_life_s": 7.2e-9, "half_life_uncertainty_minus_s": 1.5e-9, "half_life_uncertainty_plus_s": 2.3e-9,
+    "ground_state_branch_fraction": 1, "partial_half_life_s": 7.2e-9,
+    "source_url": "https://doi.org/10.1038/s41586-026-10581-w",
+    "q_source_url": "https://doi.org/10.21203/rs.3.rs-7991707/v1",
+    "branch_source_url": "https://www-nds.iaea.org/amdc/ame2020/NUBASE2020.pdf",
+    "branch_note": "Alpha branch assumed 100% from NUBASE2020; direct half-life has asymmetric uncertainties.",
+    "parent_binding_mev": 848.3618624, "binding_uncertainty_mev": 0.3176056, "binding_extrapolated": false,
+    "binding_source_url": "https://www-nds.iaea.org/amdc/ame2020/mass_1.mas20.txt",
+    "binding_note": "AME2020 predates the 2026 measurement and is correlated with earlier Q estimates.",
+    "validation_group": "te104_2026",
+    "historical_observations": [
+      {"year": 2018, "half_life_upper_limit_s": 1.8e-8, "source_url": "https://doi.org/10.1103/PhysRevLett.121.182501"},
+      {"year": 2019, "half_life_upper_limit_s": 4e-9, "source_url": "https://www.nndc.bnl.gov/ensdf/getrefs.jsp?dsid=104TE+A+DECAY%3ATENTATIVE&recid=100050007"}
+    ],
+    "theoretical_predictions": [
+      {"author": "Mohr", "year": 2007, "q_mev": 5.42, "q_uncertainty_mev": 0.07, "half_life_s_approx": 5e-9, "source_url": "https://doi.org/10.1140/epja/i2006-10168-7"}
+    ]
+  }
 ]
