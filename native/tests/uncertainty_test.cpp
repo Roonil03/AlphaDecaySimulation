@@ -7,6 +7,8 @@ int main() {
     auto a=alpha::sample_spherical_uncertainty(r), b=alpha::sample_spherical_uncertainty(r);
     check(a.status=="ok" && a.accepted==40 && a.assumed_independent && a.log10_half_life_p16<a.log10_half_life_p84 && a.log10_half_life_p50==b.log10_half_life_p50);
     std::array<double,16> bad{}; bad[0]=-1; r.covariance=bad; check(alpha::sample_spherical_uncertainty(r).status=="invalid");
+    bad[0]=-1e-15; r.covariance=bad; check(alpha::sample_spherical_uncertainty(r).status=="invalid");
     r.covariance=std::array<double,16>{}; auto c=alpha::sample_spherical_uncertainty(r); check(c.status=="ok" && !c.assumed_independent && c.log10_half_life_p16==c.log10_half_life_p84);
 }
+
 

@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <random>
+#include <limits>
 #include <vector>
 namespace alpha {
 UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest& r, const std::function<bool()>& cancelled) {
@@ -10,13 +11,16 @@ UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest& r, cons
     std::array<double,16> cov{};
     if (r.covariance) cov=*r.covariance;
     else { out.assumed_independent=true; for (int i=0;i<4;++i) { if (!std::isfinite(r.standard_deviations[i]) || r.standard_deviations[i]<0) {out.status="invalid"; out.message="Invalid standard deviation"; return out;} cov[4*i+i]=r.standard_deviations[i]*r.standard_deviations[i]; } }
-    for (int i=0;i<4;++i) for (int j=0;j<4;++j) if (!std::isfinite(cov[4*i+j]) || std::abs(cov[4*i+j]-cov[4*j+i])>1e-12*(1+std::abs(cov[4*i+j]))) {out.status="invalid"; out.message="Covariance must be finite and symmetric"; return out;}
+    double scale=0;
+    for (double x:cov) {if (!std::isfinite(x)) {out.status="invalid"; out.message="Covariance must be finite"; return out;} scale=std::max(scale,std::abs(x));}
+    const double tolerance=64*std::numeric_limits<double>::epsilon()*scale;
+    for (int i=0;i<4;++i) for (int j=0;j<4;++j) if (std::abs(cov[4*i+j]-cov[4*j+i])>tolerance) {out.status="invalid"; out.message="Covariance must be symmetric"; return out;}
     std::array<double,16> L{};
     for (int i=0;i<4;++i) for (int j=0;j<=i;++j) {
         double x=cov[4*i+j]; for(int k=0;k<j;++k) x-=L[4*i+k]*L[4*j+k];
-        if (i==j) {if (x < -1e-12) {out.status="invalid"; out.message="Covariance is not positive semidefinite"; return out;} L[4*i+j]=std::sqrt(std::max(0.0,x));}
+        if (i==j) {if (x < -tolerance) {out.status="invalid"; out.message="Covariance is not positive semidefinite"; return out;} L[4*i+j]=std::sqrt(std::max(0.0,x));}
         else if (L[4*j+j]>0) L[4*i+j]=x/L[4*j+j];
-        else if (std::abs(x)>1e-12) {out.status="invalid"; out.message="Covariance is not positive semidefinite"; return out;}
+        else if (std::abs(x)>tolerance) {out.status="invalid"; out.message="Covariance is not positive semidefinite"; return out;}
     }
     std::mt19937_64 rng(r.seed); std::normal_distribution<double> normal; std::vector<double> values; values.reserve(r.draws);
     for (std::size_t n=0;n<r.draws;++n) {
@@ -32,4 +36,5 @@ UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest& r, cons
     out.message=out.assumed_independent ? "Input covariance absent: parameters assumed independent; model and numerical errors are separate" : "Parameter spread only; model and numerical errors are separate"; return out;
 }
 }
+
 
