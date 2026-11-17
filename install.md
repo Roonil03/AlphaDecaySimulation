@@ -1,44 +1,47 @@
-# Windows installation
+# Installation and building
 
-## Run the executable
+## Windows
 
-Use 64-bit Windows with .NET Framework 4.x and WPF enabled (normally included with Windows). The application is one executable with the isotope catalog and both scientific comparison reports embedded; no adjacent data files, browser, network connection, Docker, Python, or running service are needed. Download the `AlphaDecay-windows` artifact from a successful [Tests workflow run](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/ci.yml) for the desired commit, extract it, and double-click `AlphaDecay.exe`. Access to the private repository is required to download its artifacts. Alternatively, from PowerShell in the extracted folder:
+Download `AlphaDecay-Windows` from a successful [Tests workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/ci.yml) run and extract the artifact. Run `AlphaDecay.exe` directly; the native executable includes its catalog, report data and dependency notices. A working OpenGL 3.3 graphics driver is required for the viewer. `AlphaDecay.exe --self-test` verifies embedded numerical cases and `AlphaDecay.exe --credits` prints embedded notices.
 
-```powershell
-.\AlphaDecay.exe
-```
-
-Select an isotope or enter a custom channel and choose **Calculate channel**. Drag to orbit, scroll to zoom, and use the playback controls and time slider to explore the population. The visualization and model predictions are illustrative; see the scientific limitations in [README.md](README.md).
-
-To inspect a holdout offline, choose **Dy-154** or **Os-186** in **Reference isotope**, then select **Ren shell** under **Playback model**. The measured-reference panel pairs the measured partial half-life with its uncertainty and identifies the holdout. These two channels are reported separately from the 13 legacy comparison channels. See [the holdout provenance and limitations](observatory/HOLDOUT.md); exclusion from Ren's half-life fit does not establish independence from all empirical inputs or from Qi's fit.
-
-## Build from source
-
-On 64-bit Windows, PowerShell, the .NET Framework 4.x compiler and WPF reference assemblies are required. The compiler is expected at `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`, with WPF assemblies in its `WPF` subdirectory. From the repository root:
+For a source build install Git, CMake 3.21+ and Visual Studio with the C++ desktop workload, then:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\desktop\build.ps1 -OutputPath .\dist\AlphaDecay.exe
-.\dist\AlphaDecay.exe
+cmake -S . -B build
+cmake --build build --config Release --parallel 2
+ctest --test-dir build -C Release --output-on-failure
+.\build\Release\AlphaDecay.exe
 ```
 
-The default output is `dist\AlphaDecay.exe`. The build embeds `observatory/isotopes.json`, `observatory/validation.json` and `observatory/holdout-validation.json`; rebuild after those data change. Build outputs are not source files and should not be committed.
+## Linux
 
-## Verify
+The downloadable `AlphaDecay-Linux` artifact contains `AlphaDecay-linux.tar.gz`; extracting that tarball preserves the executable bit. The tested binary target is Ubuntu 24.04 x86-64 with glibc 2.39 or newer, X11, and OpenGL 3.3. Install X11/OpenGL runtime libraries and a suitable GPU or Mesa driver. In the extracted directory:
 
-The executable runs an offline calculation self-test without opening its window. In PowerShell, wait for the Windows GUI process and check its exit code:
-
-```powershell
-$p = Start-Process -FilePath .\dist\AlphaDecay.exe -ArgumentList '--self-test' -Wait -PassThru
-$p.ExitCode
+```sh
+tar -xzf AlphaDecay-linux.tar.gz
+./AlphaDecay --self-test
+./AlphaDecay
 ```
 
-A result of `0` means the self-test passed; a nonzero result means it failed. For a downloaded artifact, replace the path with the extracted executable's path. The self-test reads the embedded catalog and both reports, compares all 15 channels against the offline numerical implementation, and checks WPF reference and playback transitions under invariant and comma-decimal display cultures. These checks do not establish general scientific accuracy. CI downloads the uploaded single-EXE artifact into a directory containing only that executable and runs the same self-test there.
+For an Ubuntu 24.04 source build, install Git, CMake, a C++20 compiler and graphics development libraries:
 
-The optional service-backed CLI retains `python -m observatory --validate` for the 13 legacy channels and `python -m observatory --validate-holdout` for the two holdouts. It is separate from the offline executable and requires the services described in [README.md](README.md).
+```sh
+sudo apt-get install git cmake g++ libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel 2
+ctest --test-dir build --output-on-failure
+./build/AlphaDecay
+```
 
-## Troubleshooting
+CMake fetches the pinned GLFW, Dear ImGui and nlohmann/json revisions on first configuration. A graphical session is required to show the viewer; a headless `--run` or `--self-test` needs no display. An Xvfb display with Mesa can run `--render-preview` in a headless environment.
 
-- If Windows reports a missing or disabled .NET Framework, enable or install .NET Framework 4.x including WPF, then retry.
-- If the build cannot find `csc.exe` or WPF assemblies, check the paths above and use a 64-bit Windows installation with those components available.
-- If the executable does not start, extract it from the downloaded archive first and check Windows security prompts and system requirements. Download artifacts only from a trusted run.
-- If a calculation is rejected, check the input ranges in [the kernel documentation](services/kernel/README.md); the domain bounds do not guarantee physical applicability.
+## Optional research and Python compatibility tools
+
+Download the matching `AlphaDecay-research` artifact from the [Research tools workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/research.yml), or use the source tree. It contains the Go scheduler and research sources, but the native executable is distributed separately. Follow [research/README.md](research/README.md) for Python virtual environments, Elixir, Lean, examples and data provenance. To run the compatibility CLI from the repository root:
+
+```sh
+python -m observatory --core /absolute/path/to/AlphaDecay
+python -m observatory --core /absolute/path/to/AlphaDecay --validate
+```
+
+On Windows use the full path to `AlphaDecay.exe`, or set `ALPHADECAY_CORE` to that path. The CLI's seeded survival samples describe independent decays for one channel. Domain limits and scientific caveats are documented in [native/README.md](native/README.md) and [the model notes](docs/external-model.md).

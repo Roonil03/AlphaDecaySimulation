@@ -4,9 +4,9 @@ from decimal import Decimal
 import json
 import math
 from pathlib import Path
-import time
-import urllib.error
-import urllib.request
+import os
+import random
+import subprocess
 
 CATALOG = Path(__file__).with_name('isotopes.json')
 Q_MEV = 8.95420
@@ -16,52 +16,39 @@ BASE = {'parent_z': 84, 'parent_a': 212, 'q_mev': Q_MEV, 'l': 0,
 TIMES = [0.0, 1e-7, 3e-7, 6e-7, 1e-6]
 
 
-def request(base, path, payload=None):
-    data = None if payload is None else json.dumps(payload, allow_nan=False).encode()
-    req = urllib.request.Request(base.rstrip('/') + path, data=data,
-                                 headers={'Content-Type': 'application/json'})
-    with urllib.request.urlopen(req, timeout=5) as response:
-        return json.load(response)
+def calculate(core, payload):
+    """Call the authoritative native executable for one versioned request."""
+    try:
+        completed = subprocess.run([core, '--run'], input=json.dumps(
+            {'schema_version': 1, **payload}, allow_nan=False), text=True,
+            capture_output=True, check=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as error:
+        raise RuntimeError(f'native calculation failed: {error}') from error
+    result = json.loads(completed.stdout)
+    if result.get('schema_version') != 1:
+        raise ValueError('unsupported native result version')
+    return result
 
 
-def ready(base, timeout=60):
-    deadline = time.monotonic() + timeout
-    while True:
-        try:
-            with urllib.request.urlopen(base.rstrip('/') + '/health', timeout=5):
-                return
-        except (OSError, urllib.error.URLError):
-            if time.monotonic() >= deadline:
-                raise RuntimeError(f'{base} did not become healthy in {timeout}s')
-            time.sleep(0.5)
-
-
-def request_when_ready(base, path, payload, timeout=60):
-    deadline = time.monotonic() + timeout
-    while True:
-        try:
-            return request(base, path, payload)
-        except urllib.error.HTTPError as error:
-            if error.code not in (502, 503, 504):
-                raise
-        except (OSError, urllib.error.URLError):
-            pass
-        if time.monotonic() >= deadline:
-            raise RuntimeError(f'{base}{path} did not become ready in {timeout}s')
-        time.sleep(0.5)
+def survival(population, seed, half_life, times):
+    """Sample independent exponential lifetimes for one decay channel."""
+    rng = random.Random(seed)
+    lifetimes = [-math.log1p(-rng.random()) * half_life / math.log(2)
+                 for _ in range(population)]
+    return {'expected_survivors': [population * 2 ** (-t / half_life) for t in times],
+            'sampled_survivors': [sum(life > t for life in lifetimes) for t in times]}
 
 
 def catalog():
     return json.loads(CATALOG.read_text(encoding='utf-8-sig'))
 
 
-def barrier(base, q):
-    return request_when_ready(base, '/v1/barrier', {**BASE, 'q_mev': q})
+def barrier(core, q):
+    return calculate(core, {**BASE, 'q_mev': q})
 
 
 def run(base, population=10000, seed=42, isotope=None, custom=None, model='research'):
     """Run an energy sweep and a seeded survival simulation for one channel."""
-    ready(base)
     item = isotope or (None if custom else next(x for x in catalog() if x['symbol'] == 'Po' and x['a'] == 212))
     inputs = {**BASE, **({'parent_z': item['z'], 'parent_a': item['a'], 'q_mev': item['q_mev']} if item else custom or {})}
     binding = inputs.pop('parent_binding_mev', None)
@@ -77,7 +64,7 @@ def run(base, population=10000, seed=42, isotope=None, custom=None, model='resea
     for offset in (-0.1, 0.0, 0.1):
         # Decimal addition keeps the accepted 0.11 MeV endpoint at exactly 0.01.
         q = float(Decimal(str(inputs['q_mev'])) + Decimal(str(offset)))
-        result = request_when_ready(base, '/v1/barrier', {**inputs, 'q_mev': q})
+        result = calculate(base, {**inputs, 'q_mev': q})
         if measured is not None:
             result['log10_ratio_to_measured'] = result['log10_half_life_s'] - math.log10(measured)
             if 'research_log10_half_life_s' in result:
@@ -86,27 +73,24 @@ def run(base, population=10000, seed=42, isotope=None, custom=None, model='resea
     central = points[1]
     selected = next((key for key in ('shell_log10_half_life_s', 'research_log10_half_life_s', 'log10_half_life_s') if key in central), 'log10_half_life_s') if model == 'research' else 'log10_half_life_s'
     log_t = central[selected]
-    # Times are restricted by the ensemble service; extreme estimates saturate the display scale.
+    # Extreme estimates saturate the display scale for plotting and sampling.
     half_life = 10 ** max(-300, min(299, log_t))
     times = [half_life * x for x in (0, .25, 1, 2, 4)]
-    survival = request_when_ready(base, '/v1/ensemble', {
-        'log10_half_life_s': log_t, 'times_s': times,
-        'population': population, 'seed': seed})
+    sample = survival(population, seed, half_life, times)
     return {'benchmark': f"{item['symbol']}-{item['a']} ground-state alpha decay" if item else 'custom alpha decay',
             'reference': item, 'measured_half_life_s': measured,
             'research_scope_note': 'Qi alpha-only fit used even-even nuclei with Z=78..108; results outside that range are extrapolations.' if not 78 <= inputs['parent_z'] <= 108 else None,
             'inputs': inputs, 'selected_model': selected, 'population': population, 'seed': seed,
-            'energy_sweep': points, 'times_s': times, 'survival': survival}
+            'energy_sweep': points, 'times_s': times, 'survival': sample}
 
 
 def validate(base, group='legacy'):
-    ready(base)
     rows = []
     for item in catalog():
         if item.get('validation_group', 'legacy') != group:
             continue
         params = {**BASE, 'parent_z': item['z'], 'parent_a': item['a'], 'q_mev': item['q_mev'], 'research_model': True, 'parent_binding_mev': item['parent_binding_mev']}
-        result = request_when_ready(base, '/v1/barrier', params)
+        result = calculate(base, params)
         ref = math.log10(item['partial_half_life_s'])
         rows.append({'isotope': f"{item['symbol']}-{item['a']}", 'reference_log10_s': ref, 'qi_extrapolation': not 78 <= item['z'] <= 108,
                      'baseline_log10_s': result['log10_half_life_s'],
@@ -131,7 +115,7 @@ def validate(base, group='legacy'):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--url', default='http://127.0.0.1:8080')
+    parser.add_argument('--core', default=os.environ.get('ALPHADECAY_CORE', 'AlphaDecay'), help='path to native executable (or ALPHADECAY_CORE)')
     parser.add_argument('--population', type=int, default=10000)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--isotope', help='catalog entry, e.g. Ra-224 (default Po-212)')
@@ -165,9 +149,9 @@ def main():
     try:
         if args.validate and args.validate_holdout:
             parser.error('choose only one validation group')
-        result = validate(args.url, 'ren_holdout' if args.validate_holdout else 'legacy') if args.validate or args.validate_holdout else run(args.url, args.population, args.seed, item, custom, args.model)
+        result = validate(args.core, 'ren_holdout' if args.validate_holdout else 'legacy') if args.validate or args.validate_holdout else run(args.core, args.population, args.seed, item, custom, args.model)
         print(json.dumps(result, indent=2, allow_nan=False))
-    except (ValueError, OverflowError) as error:
+    except (ValueError, OverflowError, RuntimeError) as error:
         parser.error(str(error))
 
 

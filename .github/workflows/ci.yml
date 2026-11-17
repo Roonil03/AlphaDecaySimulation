@@ -35,7 +35,11 @@ jobs:
           Copy-Item CREDITS.md package/
       - name: Package Linux executable
         if: runner.os == 'Linux'
-        run: mkdir package && cp build/AlphaDecay CREDITS.md package/
+        run: |
+          mkdir -p package/stage
+          cp build/AlphaDecay CREDITS.md package/stage/
+          tar -C package/stage -czf package/AlphaDecay-linux.tar.gz AlphaDecay CREDITS.md
+          rm -r package/stage
       - uses: actions/upload-artifact@v4
         with:
           name: AlphaDecay-${{ runner.os }}
@@ -55,33 +59,10 @@ jobs:
       - name: Check isolated Linux executable
         if: runner.os == 'Linux'
         run: |
-          chmod +x "$RUNNER_TEMP/isolated-alpha/AlphaDecay"
           cd "$RUNNER_TEMP/isolated-alpha"
+          tar -xzf AlphaDecay-linux.tar.gz
+          test -x AlphaDecay
           ./AlphaDecay --self-test
           xvfb-run -a ./AlphaDecay --render-preview preview.png Os-186 1050 700
-  integration:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Portable client tests
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
-      - name: Build, test, and start services
-        # Image builds run Go, Elixir, and locked Rust release tests.
-        run: docker compose up --build -d
-      - name: Exercise real services
-        run: python -m unittest discover -s tests -p 'integration.py' -v
-      - name: Reproducible benchmark
-        run: |
-          python -m observatory
-          python -m observatory --validate
-          python -m observatory --validate-holdout
-      - name: Service logs on failure
-        if: failure()
-        run: docker compose logs
-      - name: Stop services
-        if: always()
-        run: docker compose down --volumes
+
 

@@ -1,22 +1,10 @@
-# Alpha barrier kernel
-
-A deliberately simplified spherical external-barrier estimate, not a fitted nuclear-decay prediction. Build with `docker build -t alpha-kernel services/kernel` from the repository root; the image runs the release tests during build. Run with `docker run --rm -p 8081:8081 alpha-kernel`. `GET /health` returns `ok`.
-
-`POST /v1/barrier` accepts JSON with all fields required, for example:
-
-```json
-{"parent_z":92,"parent_a":238,"q_mev":4.27,"l":0,"radius_fm":9.0,"preformation":0.1,"assault_hz":1e21}
-```
-
-The response contains `log10_half_life_s`, `log10_penetrability`, and `outer_turning_fm`, all JSON numbers. Malformed/missing/unknown fields return a 4xx response; unsupported numeric values return 422. Integers Z=3..130, A=5..400, A-Z>=2 and l=0..100 are supported; Q=0.01..100 MeV, radius=0.1..100 fm, 0<preformation<=1 and 1e-300<=assault_hz<=1e30. These bounds make arithmetic finite; they do not certify physical applicability. All numeric inputs must be finite.
-
-Optionally add `"research_model": true` for separate published empirical comparisons. When the parent has even Z and even N and l=0, the response also includes `research_log10_half_life_s`; otherwise this field is omitted. If the caller additionally supplies `parent_binding_mev`, the total parent nuclear binding energy in MeV (not binding energy per nucleon), an eligible request also returns `shell_log10_half_life_s`. The supplied binding energy must be finite and in (0, 10000] MeV. Missing binding energy never gets guessed. Omitting the option or setting it false preserves the original response. Parity and l alone do not establish a ground-state transition; the caller must verify the transition. The empirical results are alpha partial half-lives, so compare with the measured partial half-life, including branching corrections where applicable.
+# External barrier and empirical comparisons
 
 ## Model
 
 For the daughter (Z-2, A-4), use reduced mass energy `mu = 931.49410242 * 4*(A-4)/A` MeV, `hbar*c = 197.3269804` MeV fm, and `e²/(4 pi epsilon0) = 1.43996448` MeV fm. For r in fm, `V(r)=C/r+D/r²` MeV, with `C=2*(Z-2)*1.43996448` and `D=(hbar*c)²*l*(l+1)/(2*mu)`. The positive outer turning point is `b=(C+sqrt(C²+4*Q*D))/(2*Q)`. The supplied radius R is the inner boundary; no nuclear potential or inner turning point is calculated. For R<b, `S=integral_R^b sqrt(2*mu*(V-Q))/(hbar*c) dr`, `log10(P)=-2*S/ln(10)` and `log10(T_1/2/s)=log10(ln(2))-log10(preformation)-log10(assault_hz)-log10(P)`. If R>=b there is no forbidden external interval and P=1. Values remain in logarithmic form to avoid underflow.
 
-C implements the potential; C++ uses 4096-panel composite Simpson integration after `r=R exp(ln(b/R)(2t-t²))` to smooth the outer endpoint. On x86-64 the quadrature square-root hot path uses SSE2 `sqrtsd`; elsewhere it uses `std::sqrt`. Tests compare both paths. The model uses l(l+1), without the Langer correction. Approximate mass numbers, point charges, a sharp specified boundary, fixed preformation/assault rate, and omitted nuclear, deformation and screening effects limit its use; it does not infer decay energies or guarantee experimental half-lives. The test suite checks the extreme Coulomb case analytically and compares 4096- and 8192-panel results for an extreme centrifugal case.
+The native C++ implementation uses 4096-panel composite Simpson integration after the substitution `r=R exp(ln(b/R)(2t-t²))` to smooth the outer endpoint. It uses `std::sqrt`. The model uses l(l+1) without the Langer correction. Approximate mass numbers, point charges, a sharp boundary, fixed preformation and assault rate, and omitted deformation and screening effects limit its use. It does not infer decay energies or guarantee measured half-lives.
 
 The WKB penetrability and centrifugal convention are consistent with [CPC WKB treatment](https://cpc.ihep.ac.cn/article/doi/10.1088/1674-1137/ae0307) and [centrifugal WKB expression](https://www.sciencedirect.com/science/article/pii/S0375947426001545). The test compares the l=0 action to the exact Coulomb integral `sqrt(2*mu*Q)*b/(hbar*c) * [acos(sqrt(R/b))-sqrt((R/b)*(1-R/b))]`.
 
@@ -28,7 +16,4 @@ For Po-212 at Q=8.95420 MeV the law gives 234.2 ns, about 0.794 times the 295.1 
 
 The second optional result implements Eqs. 2–4 of [Ren et al. (2026)](https://cpc.ihep.ac.cn/article/doi/10.1088/1674-1137/ae167b), specialized to even-even l=0. `B_LD=15.5287*A-16.9043*A^(2/3)-91.9686*(A/2-Z)^2/A-0.7025*Z^2/A^(1/3)+12.4439/sqrt(A)`, and `Esh=(parent_binding_mev-B_LD)/1 MeV`. The result is `-28.1919-1.0853*A^(1/6)*sqrt(Z)+1.6260*Z/sqrt(Q)+0.1078*(Esh-2)`. The paper fits 550 measured decays and discusses shell effects near N=126 in Po; the supplied binding energy must be sourced separately, e.g. from AME2020. The bounds and parity filter do not guarantee that the request lies in the paper's tested region. Their fit and external comparisons can overlap, so agreement does not establish out-of-sample accuracy. Neither empirical model nor the baseline resolves nucleus-specific formation amplitudes or supplies a prediction uncertainty.
 
-Run tests locally with `cargo test --release`. A repeatable single-thread numerical timing (no HTTP) is `cargo test --release benchmark -- --ignored --nocapture`; it evaluates the U-238 example above 10,000 times. Report architecture, CPU, compiler and elapsed time with results. For Docker, use the build stage: `docker build --target build -t alpha-kernel-build services/kernel`, then `docker run --rm alpha-kernel-build cargo test --release benchmark -- --ignored --nocapture`.
 
-
-Recorded benchmark: 10,000 calls in 1,240 ms (124,000 ns/call), Linux x86-64 Docker Desktop on an 11th Gen Intel Core i9-11900H @ 2.50 GHz, Rust 1.85.1, release profile. This is one run, not an HTTP throughput measurement or a speedup comparison.
