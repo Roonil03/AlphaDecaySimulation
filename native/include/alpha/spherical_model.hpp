@@ -9,5 +9,6 @@ struct SphericalModelResult {
 };
 // Shared CLI/viewer entry point. The external comparison exists only when the
 // actual request is within its domain; validation substitutions are never shown.
+SphericalWkbRequest make_spherical_wkb_request(const Request&, SphericalPotential);
 SphericalModelResult calculate_spherical_model(const Request&, SphericalPotential);
 }

@@ -1,4 +1,5 @@
 #include "alpha/core.hpp"
+#include "channel_json.hpp"
 #include "alpha/spherical_wkb.hpp"
 #include "alpha/spherical_model.hpp"
 #include "embedded.hpp"
@@ -43,7 +44,7 @@ static alpha::Request parse(const json &j) {
                                          "parent_binding_mev", "potential_model",
                                          "nuclear_depth_mev", "nuclear_radius_fm",
                                          "diffuseness_fm", "charge_radius_fm",
-                                         "centrifugal_convention", "numerov", "uncertainty"};
+"centrifugal_convention", "numerov", "uncertainty", "deformation", "parent_spin", "channels", "competing_rate_hz"};
   if (!j.is_object())
     throw std::invalid_argument("request must be an object");
   for (auto it = j.begin(); it != j.end(); ++it)
@@ -79,7 +80,9 @@ static json run_request(const json &j) {
   auto p = parse(j);
   const auto model = j.value("potential_model", std::string("external"));
   if (model == "external") {
-    if (j.contains("numerov") || j.contains("uncertainty")) throw std::invalid_argument("numerical analyses require a spherical potential model");
+for (const char *key : {"deformation", "parent_spin", "channels", "competing_rate_hz", "numerov", "uncertainty"})
+      if (j.contains(key)) throw std::invalid_argument(std::string(key) + " requires a spherical potential model");
+
     for (const char *key : {"nuclear_depth_mev", "nuclear_radius_fm", "diffuseness_fm", "charge_radius_fm", "centrifugal_convention"})
       if (j.contains(key)) throw std::invalid_argument(std::string(key) + " requires a spherical potential model");
     return serialize(alpha::calculate(p));
@@ -96,6 +99,15 @@ static json run_request(const json &j) {
   if (convention == "langer_wkb") v.centrifugal = alpha::CentrifugalConvention::langer_wkb;
   else if (convention != "physical") throw std::invalid_argument("unknown centrifugal_convention");
   auto calculation=alpha::calculate_spherical_model(p, v);
+  const bool channel_mode=j.contains("deformation") || j.contains("channels") || j.contains("parent_spin") || j.contains("competing_rate_hz");
+  if(channel_mode) {
+    json channel_input=j;
+    if(!channel_input.contains("channels")) channel_input["channels"]=json::array({{{"name","ground"},{"l",p.l}}});
+    auto input=alpha::make_spherical_wkb_request(p,v);
+    json out=run_channels(channel_input,input);
+    out["schema_version"]=1; out["potential_model"]=model; out["centrifugal_convention"]=convention;
+    return out;
+  }
   const auto &r=calculation.spherical;
   json out={{"schema_version",1},{"potential_model",model},{"centrifugal_convention",convention},
             {"status",r.status},{"message",r.message}};
@@ -194,6 +206,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 }
+
 
 
 

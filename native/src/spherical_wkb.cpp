@@ -29,7 +29,7 @@ double integrate(const std::function<double(double)>& f, double a, double b, dou
     return integrate(f,a,m,fa,fl,fm,left,tol/2,depth-1)+integrate(f,m,b,fm,fr,fb,right,tol/2,depth-1);
 }
 }
-SphericalWkbResult calculate_spherical_wkb(const SphericalWkbRequest& req) {
+SphericalWkbResult calculate_radial_wkb(const SphericalWkbRequest& req, const std::function<double(double)>& potential, double discontinuity_fm) {
     const auto& p=req.potential;
     auto fail=[](const char* status, const char* message) { SphericalWkbResult r; r.status=status; r.message=message; return r; };
     const auto finite=[](double x){return std::isfinite(x);};
@@ -44,7 +44,7 @@ SphericalWkbResult calculate_spherical_wkb(const SphericalWkbRequest& req) {
     if (p.nuclear_depth_mev > 10000)
         return fail("invalid_input", "Nuclear depth exceeds the supported maximum of 10000 MeV.");
     if (req.q_mev == 0) return fail("closed_barrier", "Zero decay energy has no finite outer Coulomb turning point.");
-    const auto f=[&](double r){return spherical_potential(p,r)-req.q_mev;};
+    const auto f=[&](double r){return potential(r)-req.q_mev;};
     // Fine scan through the nuclear region, then exponentially spaced exterior samples.
     const double end=std::max(p.charge_radius_fm, p.nuclear_radius_fm+40*p.diffuseness_fm);
     const double step=std::min(0.02, p.diffuseness_fm/16);
@@ -54,15 +54,15 @@ SphericalWkbResult calculate_spherical_wkb(const SphericalWkbRequest& req) {
     const bool initially_forbidden = y > 0;
     auto visit=[&](double r, bool discontinuity) {
         double value=f(r);
-        if ((y>0)!=(value>0)) edges.push_back({discontinuity ? p.nuclear_radius_fm : root(f,previous,r),value>0});
+        if ((y>0)!=(value>0)) edges.push_back({discontinuity ? discontinuity_fm : root(f,previous,r),value>0});
         previous=r; y=value;
     };
     const int n=static_cast<int>(std::ceil(end/step));
     for (int i=1;i<=n;++i) {
         const double r=end*i/n;
-        if (p.kind==PotentialKind::square_well && previous < p.nuclear_radius_fm && r >= p.nuclear_radius_fm) {
-            visit(std::nextafter(p.nuclear_radius_fm,0.0),false);
-            visit(p.nuclear_radius_fm,true);
+        if (p.kind==PotentialKind::square_well && previous < discontinuity_fm && r >= discontinuity_fm) {
+            visit(std::nextafter(discontinuity_fm,0.0),false);
+            visit(discontinuity_fm,true);
         }
         if (r>previous) visit(r,false);
     }
@@ -98,4 +98,8 @@ SphericalWkbResult calculate_spherical_wkb(const SphericalWkbRequest& req) {
         return result;
     } catch (const std::exception&) { return fail("numerical_error", "Action quadrature did not converge."); }
 }
+SphericalWkbResult calculate_spherical_wkb(const SphericalWkbRequest& req) {
+    return calculate_radial_wkb(req, [&](double r){ return spherical_potential(req.potential,r); }, req.potential.nuclear_radius_fm);
 }
+}
+
