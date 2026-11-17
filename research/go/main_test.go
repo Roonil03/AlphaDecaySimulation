@@ -15,7 +15,7 @@ func TestMain(m *testing.M) {
 			os.Exit(3)
 		}
 		if req["sleep"] == true {
-			time.Sleep(time.Second)
+			time.Sleep(5 * time.Second)
 		}
 		if req["fail"] == true {
 			os.Stderr.WriteString("bad request")
@@ -29,7 +29,7 @@ func TestMain(m *testing.M) {
 func TestExecuteOrderAndFailures(t *testing.T) {
 	exe, _ := os.Executable()
 	cases := []Case{{"a", json.RawMessage(`{"v":1}`)}, {"b", json.RawMessage(`{"fail":true}`)}, {"c", json.RawMessage(`{"sleep":true}`)}}
-	got, err := execute(context.Background(), exe, cases, 2, 100*time.Millisecond)
+	got, err := execute(context.Background(), exe, cases, 2, 2*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
