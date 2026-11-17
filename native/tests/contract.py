@@ -140,6 +140,49 @@ class Contract(unittest.TestCase):
                 self.assertIn('error', json.loads(proc.stderr))
         self.assertNotEqual(self.run_request(BASE | {'deformation': {'beta2': 0.1}}).returncode, 0)
 
+    def test_deformed_square_well_is_independent_of_diffuseness(self):
+        request = BASE | {'potential_model': 'square_well', 'q_mev': 5,
+                          'deformation': {'beta2': .2, 'beta4': 0}}
+        logs = []
+        for diffuseness in (.65, .01):
+            proc = self.run_request(request | {'diffuseness_fm': diffuseness})
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            answer = json.loads(proc.stdout)
+            row = answer['channels'][0]
+            self.assertEqual(row['status'], 'ok', row)
+            self.assertIsNotNone(answer['log10_total_alpha_rate_hz'])
+            logs.append(row['log10_penetrability'])
+        self.assertAlmostEqual(*logs, places=7)
+
+    def test_zero_preformation_rate_survives_failed_barrier_diagnostic(self):
+        request = BASE | {'potential_model': 'woods_saxon', 'q_mev': 100,
+                          'channels': [{'l': 0, 'preformation': 0},
+                                       {'l': 0, 'excitation_mev': 95}]}
+        proc = self.run_request(request)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        answer = json.loads(proc.stdout)
+        zero, active = answer['channels']
+        self.assertEqual(zero['barrier_status'], 'above_barrier')
+        self.assertEqual(zero['status'], 'zero_preformation')
+        self.assertIsNone(zero['log10_rate_hz'])
+        self.assertIsNone(zero['log10_partial_half_life_s'])
+        self.assertEqual(zero['conditional_alpha_branch'], 0)
+        self.assertEqual(active['status'], 'ok')
+        self.assertEqual(active['conditional_alpha_branch'], 1)
+        self.assertAlmostEqual(answer['log10_total_alpha_rate_hz'], active['log10_rate_hz'])
+        self.assertAlmostEqual(answer['log10_total_rate_hz'], active['log10_rate_hz'])
+        self.assertAlmostEqual(answer['log10_total_half_life_s'], active['log10_partial_half_life_s'])
+        # Zero formation cannot turn malformed or unresolved inputs into known rates.
+        request['channels'][0]['assault_hz'] = 0
+        proc = self.run_request(request)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn('error', json.loads(proc.stderr))
+        request['channels'][0].pop('assault_hz')
+        request['channels'][0].pop('l')
+        unresolved = json.loads(self.run_request(request).stdout)
+        self.assertEqual(unresolved['channels'][0]['status'], 'unknown_spin_requires_l')
+        self.assertIsNone(unresolved['log10_total_alpha_rate_hz'])
+
     def test_embedded_font_notice(self):
         proc = subprocess.run([EXE, '--credits'], text=True, capture_output=True)
         self.assertEqual(proc.returncode, 0, proc.stderr)
