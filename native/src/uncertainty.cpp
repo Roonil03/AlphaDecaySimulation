@@ -11,17 +11,33 @@ UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest& r, cons
     std::array<double,16> cov{};
     if (r.covariance) cov=*r.covariance;
     else { out.assumed_independent=true; for (int i=0;i<4;++i) { if (!std::isfinite(r.standard_deviations[i]) || r.standard_deviations[i]<0) {out.status="invalid"; out.message="Invalid standard deviation"; return out;} cov[4*i+i]=r.standard_deviations[i]*r.standard_deviations[i]; } }
-    double scale=0;
-    for (double x:cov) {if (!std::isfinite(x)) {out.status="invalid"; out.message="Covariance must be finite"; return out;} scale=std::max(scale,std::abs(x));}
-    const double tolerance=64*std::numeric_limits<double>::epsilon()*scale;
-    for (int i=0;i<4;++i) for (int j=0;j<4;++j) if (std::abs(cov[4*i+j]-cov[4*j+i])>tolerance) {out.status="invalid"; out.message="Covariance must be symmetric"; return out;}
+    for (double x:cov) if (!std::isfinite(x)) {out.status="invalid"; out.message="Covariance must be finite"; return out;}
+    // Factor in dimensionless correlation coordinates so a large variance in
+    // one parameter cannot hide an invalid covariance on a smaller-scale axis.
+    std::array<double,4> sigma{};
+    for (int i=0;i<4;++i) {
+        if (cov[4*i+i]<0) {out.status="invalid"; out.message="Covariance has a negative variance"; return out;}
+        sigma[i]=std::sqrt(cov[4*i+i]);
+    }
+    std::array<double,16> correlation{};
+    const double tolerance=64*std::numeric_limits<double>::epsilon();
+    for (int i=0;i<4;++i) for (int j=0;j<4;++j) {
+        if (sigma[i]==0 || sigma[j]==0) {
+            if (cov[4*i+j]!=0) {out.status="invalid"; out.message="Zero variance requires zero covariance"; return out;}
+        } else {
+            correlation[4*i+j]=(cov[4*i+j]/sigma[i])/sigma[j];
+            if (!std::isfinite(correlation[4*i+j]) || std::abs(correlation[4*i+j])>1+tolerance) {out.status="invalid"; out.message="Covariance is not positive semidefinite"; return out;}
+        }
+    }
+    for (int i=0;i<4;++i) for (int j=0;j<4;++j) if (std::abs(correlation[4*i+j]-correlation[4*j+i])>tolerance) {out.status="invalid"; out.message="Covariance must be symmetric"; return out;}
     std::array<double,16> L{};
     for (int i=0;i<4;++i) for (int j=0;j<=i;++j) {
-        double x=cov[4*i+j]; for(int k=0;k<j;++k) x-=L[4*i+k]*L[4*j+k];
+        double x=correlation[4*i+j]; for(int k=0;k<j;++k) x-=L[4*i+k]*L[4*j+k];
         if (i==j) {if (x < -tolerance) {out.status="invalid"; out.message="Covariance is not positive semidefinite"; return out;} L[4*i+j]=std::sqrt(std::max(0.0,x));}
         else if (L[4*j+j]>0) L[4*i+j]=x/L[4*j+j];
         else if (std::abs(x)>tolerance) {out.status="invalid"; out.message="Covariance is not positive semidefinite"; return out;}
     }
+    for (int i=0;i<4;++i) for (int j=0;j<=i;++j) L[4*i+j]*=sigma[i];
     std::mt19937_64 rng(r.seed); std::normal_distribution<double> normal; std::vector<double> values; values.reserve(r.draws);
     for (std::size_t n=0;n<r.draws;++n) {
         if (cancelled && cancelled()) {out.status="cancelled"; out.message="Cancelled"; return out;}
