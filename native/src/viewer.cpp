@@ -508,6 +508,8 @@ int viewer(int argc, char **argv) {
             json candidate = json::parse(file);
             if (candidate.at("schema_version") != 1 || !candidate.at("cases").is_array() || !candidate.at("calibration_ids").is_array())
               throw std::runtime_error("Unsupported fit schema");
+            if (!candidate.at("dataset_version").is_string() || candidate.at("dataset_version").get<std::string>().empty())
+              throw std::runtime_error("Invalid dataset version");
             const double pre = candidate.at("preformation").get<double>();
             const double hz = candidate.at("assault_hz").get<double>();
             if (!std::isfinite(pre) || pre <= 0 || pre > 1 || !std::isfinite(hz) || hz <= 0)
@@ -530,6 +532,8 @@ int viewer(int argc, char **argv) {
         }
         if (fit_result.is_object()) {
           ImGui::Text("Dataset: %s", fit_result.value("dataset_version", std::string("unknown")).c_str());
+          for (const char *key : {"source", "description"})
+            if (fit_result.contains(key) && fit_result[key].is_string()) ImGui::TextWrapped("%s: %s", key, fit_result[key].get<std::string>().c_str());
           for (const auto &row : fit_result["cases"]) {
             const auto label = row.at("id").get<std::string>() + " (" + row.at("split").get<std::string>() + ")";
             if (ImGui::Selectable(label.c_str())) {

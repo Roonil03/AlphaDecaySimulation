@@ -10,7 +10,7 @@ ASSAULT_HZ = 1e21  # fixed normalization; only preformation is fitted
 
 def load_data(path):
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    if data.get("schema_version") != 1 or not data.get("dataset_version"):
+    if data.get("schema_version") != 1 or not isinstance(data.get("dataset_version"), str) or not data["dataset_version"].strip():
         raise ValueError("versioned dataset schema required")
     rows = data["cases"]
     ids = [row["id"] for row in rows]
@@ -57,6 +57,7 @@ def analyze(data, predict):
         row["predicted_log10_half_life_s"] = row["baseline_log10_half_life_s"] + shift
         row["residual"] = row["log10_half_life_s"] - row["predicted_log10_half_life_s"]
     return {"schema_version": 1, "dataset_version": data["dataset_version"],
+            **{key: data[key] for key in ("source", "description") if key in data},
             "assault_hz": ASSAULT_HZ, "preformation": preformation,
             "calibration_ids": [r["id"] for r in rows if r["split"] == "calibration"], "cases": rows}
 
