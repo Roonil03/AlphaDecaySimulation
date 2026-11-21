@@ -30,7 +30,8 @@ json run_channels(const json& input,const alpha::SphericalWkbRequest& base, cons
   keys(x,{"name","excitation_mev","daughter_spin","l","preformation","assault_hz"});
   alpha::ChannelInput c; c.name=x.value("name",std::string()); c.excitation_mev=x.value("excitation_mev",0.0); c.preformation=x.value("preformation",base.preformation); c.assault_hz=x.value("assault_hz",base.assault_hz);
   if(x.contains("daughter_spin")) c.daughter=spin(x.at("daughter_spin")); if(x.contains("l")&&!x.at("l").is_null()) { c.l=exact_int(x.at("l")); }
-  auto selection=alpha::select_channel(base.q_mev,parent,c); json row={{"name",c.name},{"q_mev",selection.q_mev},{"l",selection.l?json(*selection.l):json(nullptr)}}; std::optional<double> logp;
+  auto selection=alpha::select_channel(base.q_mev,parent,c); json row={{"name",c.name},{"excitation_mev",c.excitation_mev},{"preformation",c.preformation},{"assault_hz",c.assault_hz},{"q_mev",selection.q_mev},{"l",selection.l?json(*selection.l):json(nullptr)}}; std::optional<double> logp;
+  if(x.contains("daughter_spin")) row["daughter_spin"]=x.at("daughter_spin");
   if(selection.status=="ok") {
    auto req=base; req.q_mev=selection.q_mev; req.potential.l=*selection.l; req.preformation=c.preformation; req.assault_hz=c.assault_hz;
    auto r=alpha::calculate_deformed_wkb(req,d,cancelled); if(r.status=="cancelled") throw std::runtime_error("cancelled"); row["barrier_status"]=r.status; row["barrier_message"]=r.message; row["angular_error_log10"]=r.angular_error_log10; row["charge_error_log10"]=r.charge_error_log10; row["coulomb_error_mev"]=r.coulomb_error_mev; row["angular_points"]=r.angular_points; row["multipole_order"]=r.multipole_order;
@@ -53,6 +54,6 @@ json run_channels(const json& input,const alpha::SphericalWkbRequest& base, cons
   else total_log=alpha_log;
   if(total_log) total_half=std::log10(std::log(2.0))-*total_log;
  }
- return {{"channels",rows},{"branch_convention",competing?"conditional_alpha_and_total":"conditional_alpha"},
+ return {{"channels",rows},{"deformation",{{"beta2",d.beta2},{"beta4",d.beta4}}},{"parent_spin",input.value("parent_spin",json(nullptr))},{"competing_rate_hz",opt(competing)},{"branch_convention",competing?"conditional_alpha_and_total":"conditional_alpha"},
          {"log10_total_alpha_rate_hz",opt(alpha_log)},{"log10_total_rate_hz",opt(total_log)},{"log10_total_half_life_s",opt(total_half)}};
 }

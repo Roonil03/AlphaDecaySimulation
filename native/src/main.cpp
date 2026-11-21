@@ -103,6 +103,8 @@ for (const char *key : {"deformation", "parent_spin", "channels", "competing_rat
   else if (convention != "physical") throw std::invalid_argument("unknown centrifugal_convention");
   auto calculation=alpha::calculate_spherical_model(p, v);
   json parameters = {{"potential_model", model}, {"centrifugal_convention", convention}, {"parent_z", p.parent_z}, {"parent_a", p.parent_a}, {"q_mev", p.q_mev}, {"l", p.l}, {"radius_fm", p.radius_fm}, {"preformation", p.preformation}, {"assault_hz", p.assault_hz}, {"nuclear_depth_mev", v.nuclear_depth_mev}, {"nuclear_radius_fm", v.nuclear_radius_fm}, {"diffuseness_fm", v.diffuseness_fm}, {"charge_radius_fm", v.charge_radius_fm}};
+  parameters["research_model"] = p.research_model;
+  if (p.parent_binding_mev) parameters["parent_binding_mev"] = *p.parent_binding_mev;
   const bool channel_mode=j.contains("deformation") || j.contains("channels") || j.contains("parent_spin") || j.contains("competing_rate_hz");
   if(channel_mode) {
     json channel_input=j;
