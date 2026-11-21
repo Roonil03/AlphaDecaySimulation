@@ -2,7 +2,7 @@
 
 ## Windows
 
-Download `AlphaDecay-Windows` from a successful [Tests workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/ci.yml) run and extract the artifact. Run `AlphaDecay.exe` directly; the native executable includes its catalog, report data and dependency notices. A working OpenGL 3.3 graphics driver is required for the viewer. `AlphaDecay.exe --self-test` verifies embedded numerical cases and `AlphaDecay.exe --credits` prints embedded notices.
+Download `AlphaDecay-Windows` from a successful [Tests workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/ci.yml) run and extract the artifact [the files saved by that run]. You need access to this private repository and its workflow artifacts. Run `AlphaDecay.exe` directly; the native executable includes its catalog, report data and dependency notices. A working OpenGL 3.3 graphics driver is required for the viewer. `AlphaDecay.exe --self-test` verifies embedded numerical cases and `AlphaDecay.exe --credits` prints embedded notices.
 
 For a source build install Git, CMake 3.21+, Rust/Cargo 1.75+ and Visual Studio with the C++ desktop workload, then:
 
@@ -15,7 +15,7 @@ ctest --test-dir build -C Release --output-on-failure
 
 ## Linux
 
-The downloadable `AlphaDecay-Linux` artifact contains `AlphaDecay-linux.tar.gz`; extracting that tarball preserves the executable bit. The tested binary target is Ubuntu 24.04 x86-64 with glibc 2.39 or newer, X11, and OpenGL 3.3. Install X11/OpenGL runtime libraries and a suitable GPU or Mesa driver. In the extracted directory:
+Download `AlphaDecay-Linux` from a successful [Tests workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/ci.yml) run. Its `AlphaDecay-linux.tar.gz` archive preserves the executable permission when extracted. The tested binary target is Ubuntu 24.04 x86-64 with glibc 2.39 or newer, X11, and OpenGL 3.3. Install X11/OpenGL runtime libraries and a suitable GPU or Mesa driver. In the extracted directory:
 
 ```sh
 tar -xzf AlphaDecay-linux.tar.gz
@@ -45,3 +45,4 @@ python -m observatory --core /absolute/path/to/AlphaDecay --validate
 ```
 
 On Windows use the full path to `AlphaDecay.exe`, or set `ALPHADECAY_CORE` to that path. The CLI's seeded survival samples describe independent decays for one channel. Domain limits and scientific caveats are documented in [native/README.md](native/README.md) and [the model notes](docs/external-model.md).
+
