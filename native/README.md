@@ -24,6 +24,7 @@ The fields `schema_version`, `parent_z`, `parent_a`, and `l` require JSON intege
 
 Run `AlphaDecay --credits` to display the embedded dependency license notices, including the ProggyClean font copyright and MIT license. Release packages also include `CREDITS.md`. Linux executables require system OpenGL and X11 runtime libraries. Dear ImGui's built-in font is compiled into the executable.
 
+Numerov is built by default and requires Rust/Cargo 1.75 or later. Configure with `-DALPHA_ENABLE_NUMEROV=OFF` only for builds that do not need the independent solver. Run the registered `numerov-abi` and `numerov-rust` CTest cases to verify the C interface and solver.
 ## Spherical potential alternatives
 
 The default `potential_model` is `external`, the original Coulomb plus physical
@@ -63,4 +64,12 @@ or `woods_saxon` argument after the preview width and height. See
 [the scientific notes](../docs/spherical-models.md) for model assumptions,
 Te-104 source distinctions and numerical scope.
 
+
+For a spherical `--run` request, optional `numerov` accepts `lead_radius_fm`, `match_radius_fm`, and `step_fm`. The response gives convergence status, transmission, the step and exterior differences in decades, and the difference from WKB. The physical centrifugal term is used even if WKB uses Langer. A half-life is shown only for a converged calculation and uses the request's same preformation and assault frequency. The constant inner lead and its radius are explicit model assumptions; this transmission is not a resonance width. Unsupported or unconverged Numerov cases retain the WKB response.
+
+Optional `uncertainty` accepts nonnegative integer `seed`, integer `sample_count` (1 to 1,000,000), four `standard_deviations`, or a symmetric positive-semidefinite 4-by-4 `covariance` array. Parameter order is Q, nuclear depth, nuclear radius, diffuseness, in the units above. Supplying no covariance assumes independence and is reported. Quantiles describe only the supplied parameter distribution, conditional on retained finite-rate draws, not experimental, model, or numerical uncertainty. The response reports the excluded fraction and counts of closed, zero-rate, invalid, numerical-failure and unsupported draws. No experimental uncertainty is inferred automatically. The viewer exposes these inputs and runs analysis in a cancellable background job. Numerical bounds and reference fixtures are documented in [the solver notes](../rust/numerov/README.md).
+
 Deformed shapes and daughter-channel JSON, convergence diagnostics, and viewer controls are described in [deformed channels](../docs/deformed-channels.md).
+
+For requests with daughter channels, numerical analysis is attached separately to each open selected channel using that channel's Q, l, preformation and assault frequency. It is labeled `spherical_channel_reference`; it does not calculate a deformed transmission or replace the orientation-averaged WKB rate. Viewer analysis likewise uses the spherical ground-state inputs. Deformed channel calculations run in a separate cancellable background job.
+

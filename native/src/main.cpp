@@ -4,6 +4,7 @@
 #include "alpha/spherical_model.hpp"
 #include "embedded.hpp"
 #include "viewer.hpp"
+#include "numerical_analysis.hpp"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -43,8 +44,7 @@ static alpha::Request parse(const json &j) {
                                          "parent_binding_mev", "potential_model",
                                          "nuclear_depth_mev", "nuclear_radius_fm",
                                          "diffuseness_fm", "charge_radius_fm",
-                                         "centrifugal_convention", "deformation", "parent_spin",
-                                         "channels", "competing_rate_hz"};
+"centrifugal_convention", "numerov", "uncertainty", "deformation", "parent_spin", "channels", "competing_rate_hz"};
   if (!j.is_object())
     throw std::invalid_argument("request must be an object");
   for (auto it = j.begin(); it != j.end(); ++it)
@@ -80,8 +80,9 @@ static json run_request(const json &j) {
   auto p = parse(j);
   const auto model = j.value("potential_model", std::string("external"));
   if (model == "external") {
-    for (const char *key : {"deformation", "parent_spin", "channels", "competing_rate_hz"})
+for (const char *key : {"deformation", "parent_spin", "channels", "competing_rate_hz", "numerov", "uncertainty"})
       if (j.contains(key)) throw std::invalid_argument(std::string(key) + " requires a spherical potential model");
+
     for (const char *key : {"nuclear_depth_mev", "nuclear_radius_fm", "diffuseness_fm", "charge_radius_fm", "centrifugal_convention"})
       if (j.contains(key)) throw std::invalid_argument(std::string(key) + " requires a spherical potential model");
     return serialize(alpha::calculate(p));
@@ -105,6 +106,17 @@ static json run_request(const json &j) {
     auto input=alpha::make_spherical_wkb_request(p,v);
     json out=run_channels(channel_input,input);
     out["schema_version"]=1; out["potential_model"]=model; out["centrifugal_convention"]=convention;
+    // Each returned numerical comparison is a spherical reference for the
+    // selected channel, not a deformed transmission or a total-width result.
+    if(j.contains("numerov") || j.contains("uncertainty")) {
+      for (std::size_t i=0;i<out["channels"].size();++i) {
+        auto& row=out["channels"][i]; const auto& spec=channel_input["channels"][i];
+        if(row["status"]!="ok" || row["l"].is_null()) continue;
+        auto channel=input; channel.q_mev=row["q_mev"].get<double>(); channel.potential.l=row["l"].get<int>();
+        channel.preformation=spec.value("preformation",input.preformation); channel.assault_hz=spec.value("assault_hz",input.assault_hz);
+        json analysis; append_numerical_analyses(j,channel,analysis); analysis["scope"]="spherical_channel_reference"; row["numerical_analysis"]=analysis;
+      }
+    }
     return out;
   }
   const auto &r=calculation.spherical;
@@ -115,6 +127,9 @@ static json run_request(const json &j) {
   put("action",r.action); put("log10_penetrability",r.log10_penetrability); put("log10_half_life_s",r.log10_half_life_s);
   // Only present a reference for the actual input, never a substituted status check.
   if (calculation.external_reference) out["external_reference"] = serialize(*calculation.external_reference);
+  v.daughter_z=p.parent_z-2; v.reduced_mass_mev=931.49410242*4.0*(p.parent_a-4.0)/p.parent_a; v.l=p.l;
+  alpha::SphericalWkbRequest input; input.potential=v; input.q_mev=p.q_mev; input.preformation=p.preformation; input.assault_hz=p.assault_hz;
+  append_numerical_analyses(j,input,out);
   return out;
 }
 static void check(bool b, const std::string &what) {
@@ -202,3 +217,8 @@ int main(int argc, char **argv) {
     return 1;
   }
 }
+
+
+
+
+
