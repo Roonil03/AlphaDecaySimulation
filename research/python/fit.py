@@ -27,6 +27,13 @@ def load_data(path):
 
 
 def native_prediction(core, request):
+    allowed = {"schema_version", "parent_z", "parent_a", "q_mev", "l", "radius_fm",
+               "preformation", "assault_hz", "research_model", "parent_binding_mev",
+               "potential_model", "centrifugal_convention", "nuclear_depth_mev",
+               "nuclear_radius_fm", "diffuseness_fm", "charge_radius_fm"}
+    extra = set(request) - allowed
+    if extra:
+        raise ValueError("calibration supports only single spherical channels; unsupported fields: " + ", ".join(sorted(extra)))
     request = dict(request, schema_version=1, assault_hz=ASSAULT_HZ, preformation=1.0)
     proc = subprocess.run([core, "--run"], input=json.dumps(request), text=True,
                           capture_output=True, check=True, timeout=30)

@@ -1,5 +1,5 @@
 import unittest
-from fit import analyze, load_data
+from fit import analyze, load_data, native_prediction
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from prepare import prepare
@@ -24,5 +24,8 @@ class FitTest(unittest.TestCase):
             self.assertEqual(data["source"], "source citation")
     def test_example_loads(self):
         self.assertEqual(load_data(Path(__file__).parent / "data/example-v1.json")["dataset_version"], "example-1")
+    def test_channel_overrides_cannot_enter_common_factor_fit(self):
+        with self.assertRaisesRegex(ValueError, "single spherical channels"):
+            native_prediction("unused", {"channels": [{"preformation": 0.5}]})
 if __name__ == "__main__": unittest.main()
 
