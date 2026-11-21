@@ -14,6 +14,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
       - name: Install Linux graphics build dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev xvfb
@@ -45,6 +46,17 @@ jobs:
           name: AlphaDecay-${{ runner.os }}
           path: package/*
           if-no-files-found: error
+
+  verify-package:
+    needs: native
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install Linux display dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgl1 libx11-6 libxrandr2 libxinerama1 libxcursor1 libxi6 xvfb
       - uses: actions/download-artifact@v4
         with:
           name: AlphaDecay-${{ runner.os }}
