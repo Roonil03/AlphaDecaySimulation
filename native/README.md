@@ -22,6 +22,8 @@ The result contains `schema_version`, `log10_half_life_s`, `log10_penetrability`
 
 The fields `schema_version`, `parent_z`, `parent_a`, and `l` require JSON integers within the C++ `int` range; floating-point values, including `1.0`, are rejected before conversion. The supported physical bounds still apply.
 
+Responses include `model_parameters` with resolved inputs and defaults; unit suffixes are MeV, fm and Hz, and dimensionless values have no suffix. The viewer can load a Python fit JSON by path, displays calibration and validation membership, and applies a selected single-channel case and fitted rate parameters. Calculate after selecting a case; the potential plot shows the spherical reference even in deformed mode.
+
 Run `AlphaDecay --credits` to display the embedded dependency license notices, including the ProggyClean font copyright and MIT license. Release packages also include `CREDITS.md`. Linux executables require system OpenGL and X11 runtime libraries. Dear ImGui's built-in font is compiled into the executable.
 
 Numerov is built by default and requires Rust/Cargo 1.75 or later. Configure with `-DALPHA_ENABLE_NUMEROV=OFF` only for builds that do not need the independent solver. Run the registered `numerov-abi` and `numerov-rust` CTest cases to verify the C interface and solver.

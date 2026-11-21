@@ -4,7 +4,7 @@
 
 Download `AlphaDecay-Windows` from a successful [Tests workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/ci.yml) run and extract the artifact. Run `AlphaDecay.exe` directly; the native executable includes its catalog, report data and dependency notices. A working OpenGL 3.3 graphics driver is required for the viewer. `AlphaDecay.exe --self-test` verifies embedded numerical cases and `AlphaDecay.exe --credits` prints embedded notices.
 
-For a source build install Git, CMake 3.21+ and Visual Studio with the C++ desktop workload, then:
+For a source build install Git, CMake 3.21+, Rust/Cargo 1.75+ and Visual Studio with the C++ desktop workload, then:
 
 ```powershell
 cmake -S . -B build
@@ -23,7 +23,7 @@ tar -xzf AlphaDecay-linux.tar.gz
 ./AlphaDecay
 ```
 
-For an Ubuntu 24.04 source build, install Git, CMake, a C++20 compiler and graphics development libraries:
+For an Ubuntu 24.04 source build, install Git, CMake, a C++20 compiler, Rust/Cargo 1.75+ and graphics development libraries:
 
 ```sh
 sudo apt-get install git cmake g++ libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
@@ -33,7 +33,7 @@ ctest --test-dir build --output-on-failure
 ./build/AlphaDecay
 ```
 
-CMake fetches the pinned GLFW, Dear ImGui and nlohmann/json revisions on first configuration. A graphical session is required to show the viewer; a headless `--run` or `--self-test` needs no display. An Xvfb display with Mesa can run `--render-preview` in a headless environment.
+CMake fetches the pinned GLFW, Dear ImGui and nlohmann/json revisions on first configuration. The default build includes the Rust Numerov solver; `-DALPHA_ENABLE_NUMEROV=OFF` disables it. A graphical session is required to show the viewer; a headless `--run` or `--self-test` needs no display. An Xvfb display with Mesa can run `--render-preview` in a headless environment.
 
 ## Optional research and Python compatibility tools
 
