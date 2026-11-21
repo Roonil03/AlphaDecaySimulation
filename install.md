@@ -2,7 +2,7 @@
 
 ## Windows
 
-Download `AlphaDecay-Windows` from a successful [Tests workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/ci.yml) run and extract the artifact [the files saved by that run]. You need access to this private repository and its workflow artifacts. Run `AlphaDecay.exe` directly; the native executable includes its catalog, report data and dependency notices. A working OpenGL 3.3 graphics driver is required for the viewer. `AlphaDecay.exe --self-test` verifies embedded numerical cases and `AlphaDecay.exe --credits` prints embedded notices.
+Download `AlphaDecay-Windows` from a successful [Tests workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/ci.yml) run and extract the artifact, the files saved by that run. You need access to this private repository and its workflow artifacts. Run `AlphaDecay.exe` directly. It includes its catalog, report data and dependency notices. The viewer needs a working OpenGL 3.3 graphics driver. `AlphaDecay.exe --self-test` checks embedded numerical cases and `AlphaDecay.exe --credits` prints dependency notices.
 
 For a source build install Git, CMake 3.21+, Rust/Cargo 1.75+ and Visual Studio with the C++ desktop workload, then:
 
@@ -33,11 +33,11 @@ ctest --test-dir build --output-on-failure
 ./build/AlphaDecay
 ```
 
-CMake fetches the pinned GLFW, Dear ImGui and nlohmann/json revisions on first configuration. The default build includes the Rust Numerov solver; `-DALPHA_ENABLE_NUMEROV=OFF` disables it. A graphical session is required to show the viewer; a headless `--run` or `--self-test` needs no display. An Xvfb display with Mesa can run `--render-preview` in a headless environment.
+CMake fetches the pinned GLFW, Dear ImGui and nlohmann/json revisions on first configuration. The default build includes the Rust Numerov solver. `-DALPHA_ENABLE_NUMEROV=OFF` disables it. The viewer needs a graphical session. `--run` and `--self-test` need no display. An Xvfb display with Mesa can run `--render-preview` in a headless environment.
 
 ## Optional research and Python compatibility tools
 
-Download the matching `AlphaDecay-research-Windows` or `AlphaDecay-research-Linux` artifact from the [Research tools workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/research.yml), or use the source tree. It contains the Go scheduler and research sources, but the native executable is distributed separately. Follow [research/README.md](research/README.md) for Python virtual environments, Elixir, Lean, examples and data provenance. To run the compatibility CLI from the repository root:
+Download `AlphaDecay-research-Windows` or `AlphaDecay-research-Linux` from the [Research tools workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/research.yml), or use the source tree. Each artifact contains the Go scheduler and research sources. Download the native executable separately. The [research setup guide](research/README.md) covers Python virtual environments, Elixir, Lean, examples and data sources. Run the compatibility CLI from the repository root:
 
 ```sh
 python -m observatory --core /absolute/path/to/AlphaDecay
@@ -45,4 +45,4 @@ python -m observatory --core /absolute/path/to/AlphaDecay --validate
 python -m observatory --core /absolute/path/to/AlphaDecay --validate-holdout
 ```
 
-On Windows use the full path to `AlphaDecay.exe`, or set `ALPHADECAY_CORE` to that path. `--validate` compares the 13-channel benchmark; `--validate-holdout` compares two channels separately. Both report the illustrative WKB baseline, Qi's empirical law and Ren's shell-corrected estimate. As the [holdout notes](observatory/HOLDOUT.md) explain, exclusion from Ren's half-life fit is conditional on its published selection. The tiny sample does not establish general accuracy or independence from Qi's fit, and its metrics do not propagate input uncertainties. The CLI's seeded survival samples describe independent decays for one channel. Domain limits and scientific caveats are documented in [native/README.md](native/README.md) and [the model notes](docs/external-model.md).
+On Windows use the full path to `AlphaDecay.exe`, or set `ALPHADECAY_CORE` to that path. `--validate` compares the 13-channel benchmark. `--validate-holdout` compares two channels separately. Both report the WKB baseline, Qi's empirical law and Ren's shell-corrected estimate. The [holdout assumptions and sources](observatory/HOLDOUT.md) explain the sample's conditional exclusion from Ren's fit and its limits. The comparison metrics do not propagate input uncertainties. Seeded survival samples describe independent decays for one channel. See the [native input limits](native/README.md) and [external model assumptions](docs/external-model.md) before interpreting results.

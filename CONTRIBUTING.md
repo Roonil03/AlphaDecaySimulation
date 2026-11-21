@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Alpha Decay Planetarium. For a proposed change, explain the problem, the intended result and how you checked it. Keep each pull request focused enough to review. The [README](README.md) introduces the application and links to its model notes.
+For a proposed change, explain the problem, the intended result and how you checked it. Keep each pull request focused enough to review. The [README](README.md) introduces the application and links to its model notes.
 
 ## Develop and check
 
@@ -16,12 +16,12 @@ On Windows with a multi-configuration generator, `-C Release` selects the built 
 
 ## Scientific changes
 
-For a change or improvement to a model, data value or scientific claim, link the appropriate primary research paper [the original report of the work]. Identify the equation, table or other precise location that supports each change. Give units, input ranges, assumptions and any conversion from the source. Distinguish a measured value, an upper limit and a theoretical prediction. If a paper alone does not establish a data value, also link the relevant evaluation or dataset and identify its entry.
+For a change to a model, data value or scientific claim, link the primary research paper, the original report of the work. Identify the equation, table or other precise location that supports each change. Give units, input ranges, assumptions and any conversion from the source. Distinguish a measured value, an upper limit and a theoretical prediction. If a paper alone does not establish a data value, also link the relevant evaluation or dataset and identify its entry.
 
-Explain how the change was validated [checked against an independent reference], including reference cases, expected results, tolerances and the source of each reference. State limitations and cases outside the model's scope. Add or update tests and provenance notes where needed. Numerical agreement for selected cases does not by itself establish general physical accuracy. The [model notes](docs/spherical-models.md) show how sources and limitations are recorded here.
+Explain how you checked the change against an independent reference. Include reference cases, expected results, tolerances and sources. State limitations and cases outside the model's scope. Add or update tests and source notes where needed. Agreement for selected cases does not establish general physical accuracy. The [model notes](docs/spherical-models.md) show how to record sources and limitations.
 
 For a code, documentation or other change that does not alter a scientific claim, cite the relevant issue or documentation instead. A research paper is not required for such a fix.
 
 ## Submit a pull request
 
-Describe the behavior before and after the change. Link the issue or supporting sources, list the checks you ran, and identify any remaining limitations. Include representative inputs and outputs when they help a reviewer reproduce the result. Do not include secrets or vulnerability details in a public issue or pull request; follow [SECURITY.md](SECURITY.md) instead.
+Describe the behavior before and after the change. Link the issue or supporting sources, list the checks you ran, and identify any remaining limitations. Include representative inputs and outputs when they help a reviewer reproduce the result. Follow the [security reporting instructions](SECURITY.md) for vulnerabilities. Keep secrets and vulnerability details out of public issues and pull requests.
