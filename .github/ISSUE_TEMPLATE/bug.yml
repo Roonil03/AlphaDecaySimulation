@@ -1,0 +1,25 @@
+name: Bug report
+description: Report a problem that can be reproduced.
+body:
+  - type: markdown
+    attributes:
+      value: Please do not post security vulnerabilities here. Use the security policy linked in the issue chooser.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include commands and input values, if relevant. Remove private information from output.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and output
+      description: Include your operating system, relevant software versions, and error output if available.
