@@ -37,11 +37,12 @@ CMake fetches the pinned GLFW, Dear ImGui and nlohmann/json revisions on first c
 
 ## Optional research and Python compatibility tools
 
-Download the matching `AlphaDecay-research` artifact from the [Research tools workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/research.yml), or use the source tree. It contains the Go scheduler and research sources, but the native executable is distributed separately. Follow [research/README.md](research/README.md) for Python virtual environments, Elixir, Lean, examples and data provenance. To run the compatibility CLI from the repository root:
+Download the matching `AlphaDecay-research-Windows` or `AlphaDecay-research-Linux` artifact from the [Research tools workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/research.yml), or use the source tree. It contains the Go scheduler and research sources, but the native executable is distributed separately. Follow [research/README.md](research/README.md) for Python virtual environments, Elixir, Lean, examples and data provenance. To run the compatibility CLI from the repository root:
 
 ```sh
 python -m observatory --core /absolute/path/to/AlphaDecay
 python -m observatory --core /absolute/path/to/AlphaDecay --validate
+python -m observatory --core /absolute/path/to/AlphaDecay --validate-holdout
 ```
 
-On Windows use the full path to `AlphaDecay.exe`, or set `ALPHADECAY_CORE` to that path. The CLI's seeded survival samples describe independent decays for one channel. Domain limits and scientific caveats are documented in [native/README.md](native/README.md) and [the model notes](docs/external-model.md).
+On Windows use the full path to `AlphaDecay.exe`, or set `ALPHADECAY_CORE` to that path. `--validate` compares the 13-channel benchmark; `--validate-holdout` compares two channels separately. Both report the illustrative WKB baseline, Qi's empirical law and Ren's shell-corrected estimate. As the [holdout notes](observatory/HOLDOUT.md) explain, exclusion from Ren's half-life fit is conditional on its published selection. The tiny sample does not establish general accuracy or independence from Qi's fit, and its metrics do not propagate input uncertainties. The CLI's seeded survival samples describe independent decays for one channel. Domain limits and scientific caveats are documented in [native/README.md](native/README.md) and [the model notes](docs/external-model.md).
