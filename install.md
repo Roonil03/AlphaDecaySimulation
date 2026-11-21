@@ -45,4 +45,3 @@ python -m observatory --core /absolute/path/to/AlphaDecay --validate
 ```
 
 On Windows use the full path to `AlphaDecay.exe`, or set `ALPHADECAY_CORE` to that path. The CLI's seeded survival samples describe independent decays for one channel. Domain limits and scientific caveats are documented in [native/README.md](native/README.md) and [the model notes](docs/external-model.md).
-
