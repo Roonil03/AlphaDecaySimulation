@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cfloat>
 #include <cstdint>
 #include <fstream>
 #include <iomanip>
@@ -673,6 +674,24 @@ int viewer(int argc, char **argv) {
         ImGui::TreePop();
       }
       if (valid) {
+        if (potential_model && ImGui::TreeNode("Radial potential (spherical reference)")) {
+          // Avoid r=0, where the centrifugal term may diverge. The displayed
+          // interval is bounded so very low-Q cases remain readable.
+          const auto v = make_spherical().potential;
+          const double end = std::min(1000.0, std::max(nuclear_radius * 2.0,
+              alternative.outer_turning_fm.value_or(nuclear_radius * 2.0) * 1.1));
+          constexpr int count = 256;
+          std::array<float, count> values{};
+          const double start = std::min(0.2, end / count);
+          for (int i = 0; i < count; ++i) {
+            const double r = start + (end - start) * i / (count - 1);
+            values[i] = static_cast<float>(alpha::spherical_potential(v, r));
+          }
+          ImGui::Text("Total potential (MeV), radius %.3g to %.3g fm; Q = %.5g MeV", start, end, request.q_mev);
+          ImGui::PlotLines("##potential", values.data(), count, 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(0, 130));
+          if (advanced) ImGui::TextWrapped("This is the spherical reference, not the deformed orientation-dependent barrier.");
+          ImGui::TreePop();
+        }
         if (!potential_model) {
           ImGui::Text("External WKB log10(t / s): %.8g", result.log10_half_life_s);
           ImGui::Text("External WKB half-life: %s", time_label(result.log10_half_life_s).c_str());
