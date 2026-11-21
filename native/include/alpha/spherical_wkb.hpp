@@ -1,6 +1,7 @@
 #pragma once
 #include "alpha/potentials.hpp"
 #include <optional>
+#include <functional>
 #include <string>
 
 namespace alpha {
@@ -18,4 +19,6 @@ struct SphericalWkbResult {
 // A single allowed pocket followed by one barrier is required. Log results are
 // retained even when ordinary floating-point probabilities would underflow.
 SphericalWkbResult calculate_spherical_wkb(const SphericalWkbRequest&);
+SphericalWkbResult calculate_radial_wkb(const SphericalWkbRequest&, const std::function<double(double)>&, double discontinuity_fm);
 }
+

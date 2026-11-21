@@ -66,3 +66,4 @@ jobs:
           xvfb-run -a ./AlphaDecay --render-preview preview.png Os-186 1050 700
 
 
+

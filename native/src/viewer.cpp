@@ -1,7 +1,20 @@
 #include "viewer.hpp"
 #include "alpha/core.hpp"
+#include "alpha/deformation.hpp"
+#include "channel_json.hpp"
 #include "alpha/spherical_wkb.hpp"
+
+#include "alpha/uncertainty.hpp"
+#ifdef ALPHA_ENABLE_NUMEROV
+#include "alpha/numerov.hpp"
+#endif
+#include <future>
+#include <memory>
+#include <chrono>
+#include <atomic>
+
 #include "alpha/spherical_model.hpp"
+
 #include "embedded.hpp"
 #include <glad/gl.h>
 #include <imgui.h>
@@ -127,8 +140,10 @@ struct Scene {
   Scene() {
     const char *vs = R"(#version 330 core
  layout(location=0) in vec3 pos; layout(location=1) in vec3 normal;
- uniform mat4 transform; uniform vec3 center; uniform float size; out vec3 n;
- void main(){n=normal; gl_Position=transform*vec4(center+size*pos,1);})";
+ uniform mat4 transform; uniform vec3 center; uniform float size;
+ uniform vec3 shape; out vec3 n;
+ void main(){float u=pos.y*pos.y; float radius=shape.z*(1.0+shape.x*0.3153915653*(3.0*u-1.0)+shape.y*0.1057855469*(35.0*u*u-30.0*u+3.0));
+ n=normal; gl_Position=transform*vec4(center+size*radius*pos,1);})";
     const char *fs = R"(#version 330 core
  in vec3 n; uniform vec3 color; out vec4 frag;
  void main(){float light=.25+.75*max(dot(normalize(n),normalize(vec3(-.5,.8,1))),0); frag=vec4(color*light,1);})";
@@ -181,7 +196,7 @@ struct Scene {
     glDeleteProgram(program);
   }
   void draw(int w, int h, const std::vector<std::array<float, 4>> &points,
-            double fraction, bool barrier, double ratio) {
+            double fraction, bool barrier, double ratio, alpha::Deformation deformation) {
     glViewport(0, 0, w, h);
     glEnable(GL_DEPTH_TEST);
     glClearColor(.025f, .045f, .075f, 1);
@@ -209,12 +224,17 @@ struct Scene {
                    1};
     glUniformMatrix4fv(glGetUniformLocation(program, "transform"), 1, GL_FALSE,
                        m);
+    glUniform3f(glGetUniformLocation(program, "shape"), 0, 0, 1);
     if (barrier) {
+      double raw0=1-deformation.beta2*0.3153915653+deformation.beta4*0.3173566407;
+      double norm=alpha::deformed_radius(1,deformation,0)/raw0;
+      glUniform3f(glGetUniformLocation(program, "shape"), float(deformation.beta2), float(deformation.beta4), float(norm));
       glUniform3f(glGetUniformLocation(program, "center"), 0, 0, 0);
       glUniform1f(glGetUniformLocation(program, "size"),
                   5.0f * (float)std::min(1.0, ratio));
       glUniform3f(glGetUniformLocation(program, "color"), .23f, .75f, .95f);
       glDrawElements(GL_TRIANGLES, count, GL_UNSIGNED_INT, nullptr);
+      glUniform3f(glGetUniformLocation(program, "shape"), 0, 0, 1);
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
       glUniform1f(glGetUniformLocation(program, "size"), 5);
       glUniform3f(glGetUniformLocation(program, "color"), .95f, .65f, .2f);
@@ -236,10 +256,10 @@ struct Scene {
 int viewer(int argc, char **argv) {
   bool preview = argc >= 2 && std::string(argv[1]) == "--render-preview";
   if ((!preview && argc != 1) ||
-      (preview && (argc < 3 || argc > 7 || argc == 5)))
+      (preview && (argc < 3 || argc > 9 || argc == 5 || argc == 8)))
     throw std::invalid_argument(
         "usage: AlphaDecay [--run|--self-test|--render-preview path "
-        "[catalog-id [width height [external|square_well|woods_saxon]]]]");
+        "[catalog-id [width height [external|square_well|woods_saxon [beta2 beta4]]]]]");
   int width = 1280, height = 800;
   if (argc >= 6) {
     width = std::stoi(argv[4]);
@@ -294,6 +314,25 @@ int viewer(int argc, char **argv) {
     int model = 0, potential_model = 0, convention = 0;
     double depth = 100, nuclear_radius = 9, diffuseness = .65, charge_radius = 9;
     alpha::SphericalWkbResult alternative;
+#ifdef ALPHA_ENABLE_NUMEROV
+    struct Analysis { alpha::NumerovResult numerov; alpha::UncertaintyResult uncertainty; };
+    std::future<Analysis> analysis_job;
+    auto analysis_cancel=std::make_shared<std::atomic_bool>(false);
+    std::optional<Analysis> analysis_result;
+    alpha::NumerovOptions numerical_options;
+    std::array<double,4> sigma{};
+    std::array<double,16> covariance{}; bool use_covariance=false;
+    int analysis_seed=1, analysis_draws=100;
+    bool discard_analysis=false;
+#endif
+    bool advanced=false, parent_known=false, competing_enabled=false;
+    int parent_twice_j=0, parent_parity=1;
+    double beta2=0, beta4=0, competing_rate=0;
+    struct GuiChannel { double ex=0, preformation=0.1, assault_hz=1e21; int l=0, twice_j=0, parity=1; bool daughter_known=false, custom_rate=false; };
+    std::vector<GuiChannel> channel_inputs(1);
+    json channel_result;
+    std::future<json> channel_job; auto channel_cancel=std::make_shared<std::atomic_bool>(false); bool discard_channel=false;
+    std::optional<double> combined_log_half;
     std::string error;
     std::mt19937 rng(42);
     std::uniform_real_distribution<float> u(0, 1);
@@ -305,6 +344,10 @@ int viewer(int argc, char **argv) {
           {r * xy * std::cos(phi), r * z, r * xy * std::sin(phi), u(rng)});
     }
     auto select = [&] {
+      channel_cancel->store(true); discard_channel=true; combined_log_half.reset();
+#ifdef ALPHA_ENABLE_NUMEROV
+      analysis_cancel->store(true); discard_analysis=true; analysis_result.reset();
+#endif
       auto &x = catalog[selected];
       request.parent_z = x["z"];
       request.parent_a = x["a"];
@@ -316,23 +359,53 @@ int viewer(int argc, char **argv) {
       playing = false;
       elapsed = 0;
     };
+    auto make_spherical = [&] {
+      alpha::SphericalWkbRequest input;
+      input.q_mev=request.q_mev; input.preformation=request.preformation; input.assault_hz=request.assault_hz;
+      auto &v=input.potential;
+      v.kind=potential_model == 1 ? alpha::PotentialKind::square_well : alpha::PotentialKind::woods_saxon;
+      v.daughter_z=request.parent_z-2; v.reduced_mass_mev=931.49410242 * 4.0 * (request.parent_a-4.0) / request.parent_a;
+      v.l=request.l; v.nuclear_depth_mev=depth; v.nuclear_radius_fm=nuclear_radius; v.diffuseness_fm=diffuseness; v.charge_radius_fm=charge_radius;
+      v.centrifugal=convention == 0 ? alpha::CentrifugalConvention::physical : alpha::CentrifugalConvention::langer_wkb;
+      return input;
+    };
     auto calculate = [&] {
+      if (channel_job.valid()) return;
       try {
         reference_available = false;
         result = {};
         if (potential_model) {
+
           alpha::SphericalPotential v;
           v.kind=potential_model == 1 ? alpha::PotentialKind::square_well : alpha::PotentialKind::woods_saxon;
           v.nuclear_depth_mev=depth; v.nuclear_radius_fm=nuclear_radius;
           v.diffuseness_fm=diffuseness; v.charge_radius_fm=charge_radius;
           v.centrifugal=convention == 0 ? alpha::CentrifugalConvention::physical : alpha::CentrifugalConvention::langer_wkb;
+
           auto calculation=alpha::calculate_spherical_model(request, v);
           alternative=calculation.spherical;
           reference_available=calculation.external_reference.has_value();
           if (reference_available) result=*calculation.external_reference;
+          auto input=alpha::make_spherical_wkb_request(request,v);
+          if (advanced) {
+            json data={{"deformation",{{"beta2",beta2},{"beta4",beta4}}},{"channels",json::array()}};
+            if(parent_known) data["parent_spin"]={{"twice_j",parent_twice_j},{"parity",parent_parity}};
+            if(competing_enabled) data["competing_rate_hz"]=competing_rate;
+            for(size_t i=0;i<channel_inputs.size();++i) {
+              const auto& c=channel_inputs[i]; json row={{"name",std::to_string(i+1)},{"excitation_mev",c.ex}};
+              if(c.l>=0) row["l"]=c.l;
+              if(c.custom_rate) {row["preformation"]=c.preformation; row["assault_hz"]=c.assault_hz;}
+              if(c.daughter_known) row["daughter_spin"]={{"twice_j",c.twice_j},{"parity",c.parity}};
+              data["channels"].push_back(row);
+            }
+            combined_log_half.reset(); channel_result=json{};
+            channel_cancel=std::make_shared<std::atomic_bool>(false); auto token=channel_cancel; discard_channel=false;
+            channel_job=std::async(std::launch::async,[data,input,token] {return run_channels(data,input,[token]{return token->load();});});
+          }
         } else {
           result=alpha::calculate(request);
           reference_available=true;
+
         }
         valid = true;
         error.clear();
@@ -345,15 +418,27 @@ int viewer(int argc, char **argv) {
       }
     };
     select();
-    if (argc == 7) {
+    if (argc >= 7) {
       const std::string preview_model=argv[6];
       if (preview_model == "square_well") potential_model=1;
       else if (preview_model == "woods_saxon") potential_model=2;
       else if (preview_model != "external") throw std::invalid_argument("unknown preview potential");
     }
+    if(argc==9) {
+      if(!potential_model) throw std::invalid_argument("deformed preview requires a nuclear potential");
+      beta2=std::stod(argv[7]); beta4=std::stod(argv[8]); advanced=true; barrier=true;
+    }
     calculate();
+    auto poll_channels = [&] {
+      if(channel_job.valid() && channel_job.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
+        try { auto value=channel_job.get(); if(!discard_channel) { channel_result=std::move(value); if(!channel_result["log10_total_half_life_s"].is_null()) combined_log_half=channel_result["log10_total_half_life_s"].get<double>(); } }
+        catch(const std::exception& e) { if(!discard_channel) {valid=false; error=e.what();} }
+      }
+    };
+    if(preview && channel_job.valid()) {channel_job.wait(); poll_channels();}
     auto selected_log = [&]() -> std::optional<double> {
       if (!valid) return {};
+      if (advanced && potential_model && model == 0) return combined_log_half;
       if (model == 1) return reference_available ? result.research_log10_half_life_s : std::nullopt;
       if (model == 2) return reference_available ? result.shell_log10_half_life_s : std::nullopt;
       return potential_model ? alternative.log10_half_life_s : std::optional<double>{result.log10_half_life_s};
@@ -362,6 +447,7 @@ int viewer(int argc, char **argv) {
     int frames = 0;
     while (!glfwWindowShouldClose(window)) {
       glfwPollEvents();
+      poll_channels();
       double now = glfwGetTime(), dt = std::min(.1, now - last);
       last = now;
       if (playing) {
@@ -378,7 +464,8 @@ int viewer(int argc, char **argv) {
                  model_available ? 1 - std::exp(-std::log(2.0) * elapsed) : 1,
                  barrier && valid,
                  valid && (!potential_model || alternative.outer_turning_fm) ?
-                     (potential_model ? alternative.inner_turning_fm.value_or(nuclear_radius) / *alternative.outer_turning_fm : request.radius_fm / result.outer_turning_fm) : 0);
+                     (potential_model ? (advanced ? nuclear_radius : alternative.inner_turning_fm.value_or(nuclear_radius)) / *alternative.outer_turning_fm : request.radius_fm / result.outer_turning_fm) : 0,
+                 valid && potential_model && advanced ? alpha::Deformation{beta2,beta4} : alpha::Deformation{});
       ImGui_ImplOpenGL3_NewFrame();
       ImGui_ImplGlfw_NewFrame();
       ImGui::NewFrame();
@@ -390,7 +477,7 @@ int viewer(int argc, char **argv) {
                    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
                        ImGuiWindowFlags_NoCollapse);
       ImGui::TextWrapped(
-          "Spherical WKB models | one alpha channel");
+          "WKB barrier models | daughter channels");
       ImGui::Separator();
       std::string label = catalog[selected]["symbol"].get<std::string>() + "-" +
                           std::to_string(catalog[selected]["a"].get<int>());
@@ -418,6 +505,34 @@ int viewer(int argc, char **argv) {
         const char *conventions[] = {"Physical l(l+1)", "Langer WKB (l+1/2)^2"};
         changed |= ImGui::Combo("Centrifugal term", &convention, conventions, 2);
       }
+      if (potential_model) {
+        changed |= ImGui::Checkbox("Deformation and daughter channels", &advanced);
+        if (advanced) {
+          changed |= ImGui::InputDouble("Beta 2", &beta2, 0, 0, "%.4g");
+          changed |= ImGui::InputDouble("Beta 4", &beta4, 0, 0, "%.4g");
+          ImGui::TextWrapped("Blue: R(theta). Gold: spherical-reference outer radius. Barrier is schematic.");
+          changed |= ImGui::Checkbox("Parent spin known", &parent_known);
+          if(parent_known) { changed |= ImGui::InputInt("Parent twice J", &parent_twice_j); changed |= ImGui::InputInt("Parent parity (+1/-1)", &parent_parity); }
+          changed |= ImGui::Checkbox("Include competing rate", &competing_enabled);
+          if(competing_enabled) changed |= ImGui::InputDouble("Competing rate (Hz)", &competing_rate, 0, 0, "%.6g");
+          if(ImGui::TreeNode("Edit daughter channels")) {
+            for(size_t i=0;i<channel_inputs.size();++i) {
+              ImGui::PushID(static_cast<int>(i)); auto& c=channel_inputs[i];
+              ImGui::Text("Channel %zu",i+1);
+              changed |= ImGui::InputDouble("Excitation (MeV)",&c.ex,0,0,"%.6g");
+              changed |= ImGui::InputInt("l (-1 = choose from spins)",&c.l);
+              changed |= ImGui::Checkbox("Custom preformation / assault",&c.custom_rate);
+              if(c.custom_rate) {changed |= ImGui::InputDouble("Channel preformation",&c.preformation,0,0,"%.6g"); changed |= ImGui::InputDouble("Channel assault (Hz)",&c.assault_hz,0,0,"%.6g");}
+              changed |= ImGui::Checkbox("Daughter spin known",&c.daughter_known);
+              if(c.daughter_known) {changed |= ImGui::InputInt("Daughter twice J",&c.twice_j); changed |= ImGui::InputInt("Daughter parity (+1/-1)",&c.parity);}
+              if(channel_inputs.size()>1 && ImGui::Button("Remove channel")) {channel_inputs.erase(channel_inputs.begin()+i); changed=true; ImGui::PopID(); break;}
+              ImGui::Separator(); ImGui::PopID();
+            }
+            if(ImGui::Button("Add channel")) {channel_inputs.emplace_back();changed=true;}
+            ImGui::TreePop();
+          }
+        }
+      }
       bool identity_changed = ImGui::InputInt("Parent Z", &request.parent_z);
       identity_changed |= ImGui::InputInt("Parent A", &request.parent_a);
       if (identity_changed)
@@ -438,16 +553,78 @@ int viewer(int argc, char **argv) {
         changed = true;
       }
       if (changed) {
+        channel_cancel->store(true); discard_channel=true; combined_log_half.reset();
+#ifdef ALPHA_ENABLE_NUMEROV
+        analysis_cancel->store(true); discard_analysis=true; analysis_result.reset();
+#endif
         valid = false;
         playing = false;
         error.clear();
       }
-      if (ImGui::Button("Calculate"))
-        calculate();
+      if (channel_job.valid()) {
+        ImGui::TextUnformatted("Calculating channels in background...");
+        if (ImGui::Button("Cancel channels")) {channel_cancel->store(true); discard_channel=true;}
+      } else if (ImGui::Button("Calculate")) calculate();
       ImGui::SameLine();
       if (!error.empty())
         ImGui::TextWrapped("%s", error.c_str());
       ImGui::Separator();
+#ifdef ALPHA_ENABLE_NUMEROV
+      if (analysis_job.valid() && analysis_job.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
+        try { auto finished=analysis_job.get(); if (!discard_analysis) analysis_result=std::move(finished); }
+        catch (const std::exception& e) { error=e.what(); }
+      }
+      if (potential_model && ImGui::TreeNode("Numerov and parameter uncertainty")) {
+        bool options_changed=false;
+        options_changed |= ImGui::InputDouble("Inner lead radius (fm)",&numerical_options.lead_radius_fm,0,0,"%.5g");
+        options_changed |= ImGui::InputDouble("Exterior match radius (fm)",&numerical_options.match_radius_fm,0,0,"%.5g");
+        options_changed |= ImGui::InputDouble("Numerov step (fm)",&numerical_options.step_fm,0,0,"%.5g");
+        options_changed |= ImGui::InputDouble("Q standard deviation (MeV)",&sigma[0],0,0,"%.5g");
+        options_changed |= ImGui::InputDouble("Depth standard deviation (MeV)",&sigma[1],0,0,"%.5g");
+        options_changed |= ImGui::InputDouble("Radius standard deviation (fm)",&sigma[2],0,0,"%.5g");
+        options_changed |= ImGui::InputDouble("Diffuseness standard deviation (fm)",&sigma[3],0,0,"%.5g");
+        options_changed |= ImGui::Checkbox("Use covariance matrix",&use_covariance);
+        if (use_covariance && ImGui::TreeNode("Covariance: Q, depth, radius, diffuseness")) {
+          for (int row=0;row<4;++row) for (int col=0;col<4;++col) {
+            std::string label="C["+std::to_string(row)+","+std::to_string(col)+"]";
+            options_changed |= ImGui::InputDouble(label.c_str(),&covariance[row*4+col],0,0,"%.5g");
+          }
+          ImGui::TreePop();
+        }
+        options_changed |= ImGui::InputInt("Random seed",&analysis_seed);
+        options_changed |= ImGui::InputInt("Samples",&analysis_draws);
+        if(options_changed) {analysis_cancel->store(true); discard_analysis=true; analysis_result.reset();}
+        if (analysis_job.valid()) {
+          ImGui::TextUnformatted("Calculating in background...");
+          if (ImGui::Button("Cancel analysis")) { analysis_cancel->store(true); discard_analysis=true; }
+        } else if (valid && analysis_seed>=0 && analysis_draws>0 && analysis_draws<=1000000 && ImGui::Button("Run numerical analysis")) {
+          auto input=make_spherical(); auto options=numerical_options; auto deviations=sigma;
+          alpha::UncertaintyRequest u; u.baseline=input; u.standard_deviations=deviations; if(use_covariance) u.covariance=covariance; u.seed=static_cast<std::uint64_t>(analysis_seed); u.draws=static_cast<std::size_t>(analysis_draws);
+          analysis_cancel=std::make_shared<std::atomic_bool>(false); auto token=analysis_cancel; discard_analysis=false; analysis_result.reset();
+          analysis_job=std::async(std::launch::async,[input,options,u,token] {
+            Analysis x; x.numerov=alpha::calculate_numerov(input,options,token.get());
+            if (!token->load()) x.uncertainty=alpha::sample_spherical_uncertainty(u,[token]{return token->load();});
+            return x;
+          });
+        }
+        if (analysis_result) {
+          auto &n=analysis_result->numerov; auto &u=analysis_result->uncertainty;
+          ImGui::Text("Numerov: %s",n.status.c_str()); ImGui::TextWrapped("%s",n.message.c_str());
+          if(n.log10_transmission) ImGui::Text("log10 transmission: %.8g",*n.log10_transmission);
+          if(n.step_error_decades && n.match_error_decades) ImGui::Text("Step / exterior error: %.3g / %.3g decades",*n.step_error_decades,*n.match_error_decades);
+          if(n.wkb_difference_decades) ImGui::Text("Numerov minus WKB: %.5g decades",*n.wkb_difference_decades);
+          if(convention==1) ImGui::TextWrapped("Comparison uses different centrifugal terms: Numerov physical, WKB Langer.");
+          if(n.log10_half_life_s) ImGui::Text("Numerov log10 half-life: %.8g",*n.log10_half_life_s);
+          ImGui::Text("Finite-rate draws: %zu retained; %zu excluded (%.1f%%)",u.accepted,u.rejected,100*u.rejection_fraction);
+          ImGui::Text("Excluded: %zu closed, %zu zero rate, %zu invalid, %zu numerical, %zu unsupported",u.closed,u.zero_rate,u.invalid,u.numerical_failure,u.unsupported);
+          if(u.log10_half_life_p50) ImGui::Text("log10 half-life p16 / p50 / p84: %.4g / %.4g / %.4g",*u.log10_half_life_p16,*u.log10_half_life_p50,*u.log10_half_life_p84);
+          ImGui::TextWrapped("%s",u.message.c_str());
+          ImGui::TextWrapped("Spherical ground-state comparison; deformed channel transmission is not included.");
+        ImGui::TextWrapped("Inner-lead radius is a model assumption. Physical centrifugal term; same preformation and assault frequency. Not a resonance width.");
+        }
+        ImGui::TreePop();
+      }
+#endif
       const char *models[] = {"Selected WKB", "Qi (2009)", "Ren (2026)"};
       if (ImGui::Combo("Playback model", &model, models, 3)) {
         playing = false;
@@ -480,15 +657,30 @@ int viewer(int argc, char **argv) {
         ImGui::Text("Survivors: %d sampled / %.1f expected of 180", sampled,
                     180 * survival);
       }
+      if(valid && potential_model && advanced && ImGui::TreeNode("Channel results")) {
+        ImGui::TextWrapped(competing_enabled ? "Branches include the supplied competing rate." : "Branches are conditional on alpha decay.");
+        if(combined_log_half) ImGui::Text(competing_enabled ? "Total log10 half-life: %.8g" : "Alpha-only log10 half-life: %.8g",*combined_log_half);
+        for(const auto& row:channel_result["channels"]) {
+          ImGui::Separator(); ImGui::Text("Channel %s: %s",row["name"].get<std::string>().c_str(),row["status"].get<std::string>().c_str());
+          ImGui::Text("Q = %.6g MeV",row["q_mev"].get<double>());
+          if(!row["l"].is_null()) ImGui::Text("l = %d",row["l"].get<int>());
+          if(!row["log10_partial_half_life_s"].is_null()) ImGui::Text("Partial log10 half-life = %.8g",row["log10_partial_half_life_s"].get<double>());
+          if(!row["conditional_alpha_branch"].is_null()) ImGui::Text("Conditional alpha branch = %.8g",row["conditional_alpha_branch"].get<double>());
+          if(!row["total_branch"].is_null()) ImGui::Text("Overall branch = %.8g",row["total_branch"].get<double>());
+          if(row.contains("angular_error_log10")) ImGui::Text("Angular / charge log errors: %.3g / %.3g",row["angular_error_log10"].get<double>(),row["charge_error_log10"].get<double>());
+          if(row.contains("barrier_message") && !row["barrier_message"].get<std::string>().empty()) ImGui::TextWrapped("%s",row["barrier_message"].get<std::string>().c_str());
+        }
+        ImGui::TreePop();
+      }
       if (valid) {
         if (!potential_model) {
           ImGui::Text("External WKB log10(t / s): %.8g", result.log10_half_life_s);
           ImGui::Text("External WKB half-life: %s", time_label(result.log10_half_life_s).c_str());
         } else {
-          ImGui::Text("Spherical status: %s", alternative.status.c_str());
+          ImGui::Text("Spherical reference status: %s", alternative.status.c_str());
           if (!alternative.message.empty()) ImGui::TextWrapped("%s", alternative.message.c_str());
-          if (alternative.log10_half_life_s) ImGui::Text("Spherical log10(t / s): %.8g", *alternative.log10_half_life_s);
-          if (alternative.log10_penetrability) ImGui::Text("log10 penetrability: %.8g", *alternative.log10_penetrability);
+          if (alternative.log10_half_life_s) ImGui::Text("Spherical reference log10(t / s): %.8g", *alternative.log10_half_life_s);
+          if (alternative.log10_penetrability) ImGui::Text("Spherical reference log10 penetrability: %.8g", *alternative.log10_penetrability);
           if (alternative.inner_turning_fm) ImGui::Text("Inner barrier boundary: %.5g fm", *alternative.inner_turning_fm);
           if (reference_available) ImGui::Text("External reference log10(t / s): %.8g", result.log10_half_life_s);
         }
@@ -505,7 +697,7 @@ int viewer(int argc, char **argv) {
                      request.parent_a == x["a"].get<int>() &&
                      request.q_mev == x["q_mev"].get<double>() &&
                      request.l == x.value("l", 0);
-        if (match) {
+        if (match && !(advanced && potential_model)) {
           double measured = x["partial_half_life_s"].get<double>();
           ImGui::Text("Measured partial half-life: %.6g s", measured);
           ImGui::Text("Measured: %s", time_label(std::log10(measured)).c_str());
@@ -517,7 +709,7 @@ int viewer(int argc, char **argv) {
           if (x.contains("q_uncertainty_mev"))
             ImGui::Text("Q uncertainty: %.4g MeV",
                         x["q_uncertainty_mev"].get<double>());
-          if (available) {
+          if (available && !(advanced && potential_model)) {
             double pred = *selected_log();
             ImGui::Text("Residual log10(predicted / measured): %.5g",
                         pred - std::log10(measured));
@@ -540,13 +732,15 @@ int viewer(int argc, char **argv) {
           if (x.value("validation_group", std::string{}) == "ren_holdout")
             ImGui::TextWrapped("Ren holdout: excluded by the published "
                                "half-life uncertainty criterion.");
-        } else
+        } else if (!(advanced && potential_model))
           ImGui::TextWrapped(
               "Custom channel: no catalog measurement associated.");
       }
       ImGui::Checkbox("Single nucleus / barrier view", &barrier);
       ImGui::PopItemWidth();
-      if (barrier)
+      if (barrier && advanced && potential_model)
+        ImGui::TextWrapped("Blue: volume-normalized nuclear radius R(theta). Gold: spherical-reference outer turning radius; barrier and orientation-dependent turning surfaces are schematic.");
+      else if (barrier)
         ImGui::TextWrapped("Blue: inner barrier boundary; gold wireframe: outer turning "
                            "radius b. Radii use the physical R/b ratio when R "
                            "< b. For R >= b there is no external barrier.");
@@ -573,6 +767,10 @@ int viewer(int argc, char **argv) {
       }
       glfwSwapBuffers(window);
     }
+    channel_cancel->store(true);
+#ifdef ALPHA_ENABLE_NUMEROV
+    analysis_cancel->store(true);
+#endif
   }
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
@@ -581,3 +779,12 @@ int viewer(int argc, char **argv) {
   glfwTerminate();
   return 0;
 }
+
+
+
+
+
+
+
+
+
