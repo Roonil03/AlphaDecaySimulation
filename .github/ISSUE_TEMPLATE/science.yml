@@ -1,0 +1,22 @@
+name: Scientific correction
+description: Report a possible error in a scientific method, value, or result.
+body:
+  - type: textarea
+    id: concern
+    attributes:
+      label: What needs correction?
+      description: Identify the method, value, result, or location and explain the concern.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Research evidence
+      description: Link the research paper and give its DOI, relevant equation, table, or dataset, and units. Explain how it supports the correction.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction or comparison
+      description: Give inputs, units, steps, and expected and observed results where applicable.
