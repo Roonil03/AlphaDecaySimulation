@@ -85,7 +85,10 @@ for (const char *key : {"deformation", "parent_spin", "channels", "competing_rat
 
     for (const char *key : {"nuclear_depth_mev", "nuclear_radius_fm", "diffuseness_fm", "charge_radius_fm", "centrifugal_convention"})
       if (j.contains(key)) throw std::invalid_argument(std::string(key) + " requires a spherical potential model");
-    return serialize(alpha::calculate(p));
+    auto out = serialize(alpha::calculate(p));
+    out["model_parameters"] = {{"potential_model", "external"}, {"parent_z", p.parent_z}, {"parent_a", p.parent_a}, {"q_mev", p.q_mev}, {"l", p.l}, {"radius_fm", p.radius_fm}, {"preformation", p.preformation}, {"assault_hz", p.assault_hz}, {"research_model", p.research_model}};
+    if (p.parent_binding_mev) out["model_parameters"]["parent_binding_mev"] = *p.parent_binding_mev;
+    return out;
   }
   if (model != "square_well" && model != "woods_saxon")
     throw std::invalid_argument("unknown potential_model");
@@ -99,6 +102,7 @@ for (const char *key : {"deformation", "parent_spin", "channels", "competing_rat
   if (convention == "langer_wkb") v.centrifugal = alpha::CentrifugalConvention::langer_wkb;
   else if (convention != "physical") throw std::invalid_argument("unknown centrifugal_convention");
   auto calculation=alpha::calculate_spherical_model(p, v);
+  json parameters = {{"potential_model", model}, {"centrifugal_convention", convention}, {"parent_z", p.parent_z}, {"parent_a", p.parent_a}, {"q_mev", p.q_mev}, {"l", p.l}, {"radius_fm", p.radius_fm}, {"preformation", p.preformation}, {"assault_hz", p.assault_hz}, {"nuclear_depth_mev", v.nuclear_depth_mev}, {"nuclear_radius_fm", v.nuclear_radius_fm}, {"diffuseness_fm", v.diffuseness_fm}, {"charge_radius_fm", v.charge_radius_fm}};
   const bool channel_mode=j.contains("deformation") || j.contains("channels") || j.contains("parent_spin") || j.contains("competing_rate_hz");
   if(channel_mode) {
     json channel_input=j;
@@ -117,6 +121,7 @@ for (const char *key : {"deformation", "parent_spin", "channels", "competing_rat
         json analysis; append_numerical_analyses(j,channel,analysis); analysis["scope"]="spherical_channel_reference"; row["numerical_analysis"]=analysis;
       }
     }
+    out["model_parameters"] = parameters;
     return out;
   }
   const auto &r=calculation.spherical;
@@ -130,6 +135,7 @@ for (const char *key : {"deformation", "parent_spin", "channels", "competing_rat
   v.daughter_z=p.parent_z-2; v.reduced_mass_mev=931.49410242*4.0*(p.parent_a-4.0)/p.parent_a; v.l=p.l;
   alpha::SphericalWkbRequest input; input.potential=v; input.q_mev=p.q_mev; input.preformation=p.preformation; input.assault_hz=p.assault_hz;
   append_numerical_analyses(j,input,out);
+  out["model_parameters"] = parameters;
   return out;
 }
 static void check(bool b, const std::string &what) {

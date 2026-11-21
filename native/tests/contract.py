@@ -20,7 +20,8 @@ class Contract(unittest.TestCase):
         self.assertEqual(result['schema_version'], 1)
         self.assertAlmostEqual(result['research_log10_half_life_s'], -6.630368823101762, places=9)
         self.assertAlmostEqual(result['shell_log10_half_life_s'], -6.500350233085122, places=9)
-        self.assertTrue(all(math.isfinite(v) for v in result.values()))
+        self.assertTrue(all(math.isfinite(v) for v in result.values() if isinstance(v, (int, float))))
+        self.assertEqual(result['model_parameters']['q_mev'], BASE['q_mev'])
 
     def test_gating_and_invalid_inputs(self):
         for change in ({'l': 1}, {'parent_a': 211}, {'research_model': False}):
@@ -66,6 +67,8 @@ class Contract(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, proc.stderr)
             result = json.loads(proc.stdout)
             self.assertEqual(result['status'], 'ok')
+            self.assertEqual(result['model_parameters']['nuclear_depth_mev'], 100)
+            self.assertEqual(result['model_parameters']['diffuseness_fm'], .65)
             self.assertGreater(result['outer_turning_fm'], result['inner_turning_fm'])
             self.assertLess(result['log10_penetrability'], 0)
             self.assertIn('external_reference', result)
