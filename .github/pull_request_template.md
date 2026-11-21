@@ -8,4 +8,4 @@ List the checks you ran and their results. Explain any checks you could not run.
 
 ## Scientific changes
 
-If this changes scientific methods, values, or results, use the [science template](https://github.com/Roonil03/AlphaDecaySimulation/compare/main...HEAD?quick_pull=1&template=science.md), or include its evidence and validation here. Replace `HEAD` in the link with your branch name.
+If this changes scientific methods, values, or results, use the science template or include its evidence and validation here. To select it, add `?template=science.md` to your compare URL (or `&template=science.md` if the URL already has a query). See [GitHub's template instructions](https://docs.github.com/en/pull-requests/reference/using-query-parameters-to-create-a-pull-request).
