@@ -53,4 +53,10 @@ The native build pins [GLFW 3.4](https://github.com/glfw/glfw) (zlib license), [
 
 The independent Numerov solver is written in [Rust](https://www.rust-lang.org/) (MIT OR Apache-2.0). Optional research tooling uses Go 1.22 or newer (BSD-style), Elixir 1.14 or newer and Erlang/OTP (Apache-2.0), [Jason 1.4.5](https://github.com/michalmuskala/jason) (Apache-2.0), Python 3 (PSF license), and [Matplotlib 3.10.7](https://matplotlib.org/) (Matplotlib license). The proofs pin Lean 4.15.0 and Mathlib v4.15.0 (Apache-2.0); transitive proof and Elixir dependencies are pinned in their lock files. The Astro 0.1.15a sketch uses the syntax of the experimental [Astro language](https://github.com/astrolang/astro) (Apache-2.0); Astro is not a runtime dependency.
 
-Related scientific and educational work includes [ALPHAD](https://github.com/IAEA-NSDDNetwork/ALPHAD), [AlphaHF](https://github.com/IAEA-NSDDNetwork/AlphaHF), HFBTHO and HFODD nuclear-structure programs, [PhET Alpha Decay](https://github.com/phetsims/alpha-decay), [NuDat](https://www.nndc.bnl.gov/nudat3/), and [radioactivedecay](https://github.com/radioactivedecay/radioactivedecay). These projects provide context and inspiration; they are not bundled as dependencies. Individual catalog and model references are linked in the source data and scientific notes.
+Related scientific and educational work provides context and inspiration; none is bundled as a dependency:
+
+- [ALPHAD](https://github.com/IAEA-NSDDNetwork/ALPHAD) and [AlphaHF](https://conferences.iaea.org/event/387/contributions/30910/attachments/16221/27152/2024NSDD_update_on_ENSDF_Java_codes.pdf) provide evaluated alpha-transition and hindrance-factor context.
+- [HFBTHO](https://doi.org/10.1016/j.cpc.2013.01.013) and [HFODD](https://arxiv.org/abs/2104.08255) motivate consideration of deformed nuclear geometry; this application does not run those structure solvers.
+- [PhET Alpha Decay](https://phet.colorado.edu/en/simulations/alpha-decay) provides educational context for the population illustration. [NuDat](https://www.nndc.bnl.gov/nudat3/) provides evaluated nuclear-data context, while [radioactivedecay](https://github.com/radioactivedecay/radioactivedecay) provides decay and branch-accounting context.
+
+Individual catalog and model references are linked in the source data and scientific notes.
