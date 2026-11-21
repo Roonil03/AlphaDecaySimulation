@@ -19,4 +19,4 @@ body:
     id: evidence
     attributes:
       label: Research evidence for scientific improvements
-      description: For a scientific change, link the research paper and give its DOI, relevant equation, table, or dataset, and units. Explain how it supports the proposal.
+      description: For a scientific change, link the research paper and give its DOI if available, or an arXiv identifier or stable paper reference. Identify the relevant equation, table, or dataset and units. Explain how it supports the proposal.

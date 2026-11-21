@@ -4,7 +4,7 @@ Describe the method, value, or result being changed and why. Link any related is
 
 ## Research evidence
 
-Link the research paper and provide its DOI and the relevant equation, table, or dataset. Include units and explain how the source supports this change.
+Link the research paper and provide its DOI if available, or an arXiv identifier or stable paper reference. Identify the relevant equation, table, or dataset. Include units and explain how the source supports this change.
 
 ## Validation
 
