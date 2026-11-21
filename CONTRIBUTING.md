@@ -13,3 +13,11 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 On Windows with a multi-configuration generator, `-C Release` selects the built configuration for tests. CMake fetches pinned dependencies on first configuration, and the default build needs Rust/Cargo for Numerov. The [Tests workflow](.github/workflows/ci.yml) runs these commands on Windows and Ubuntu and checks packaged executables. Run checks relevant to your change and report their results, including any you could not run. See [research tools](research/README.md) for optional component-specific checks.
+
+## Scientific changes
+
+For a change or improvement to a model, data value or scientific claim, link the appropriate primary research paper [the original report of the work]. Identify the equation, table or other precise location that supports each change. Give units, input ranges, assumptions and any conversion from the source. Distinguish a measured value, an upper limit and a theoretical prediction. If a paper alone does not establish a data value, also link the relevant evaluation or dataset and identify its entry.
+
+Explain how the change was validated [checked against an independent reference], including reference cases, expected results, tolerances and the source of each reference. State limitations and cases outside the model's scope. Add or update tests and provenance notes where needed. Numerical agreement for selected cases does not by itself establish general physical accuracy. The [model notes](docs/spherical-models.md) show how sources and limitations are recorded here.
+
+For a code, documentation or other change that does not alter a scientific claim, cite the relevant issue or documentation instead. A research paper is not required for such a fix.
