@@ -60,6 +60,9 @@ fn propagate<F:Fn(f64)->f64,G:Fn(f64)->Option<C>>(inner:f64,outer:f64,step:f64,k
     let h=(outer-inner)/(n as f64);
     let mut yp=boundary(outer)?; let mut y=boundary(outer-h)?;
     let mut log_scale=0.0; let mut last=[C::default();5];
+    // Coarse meshes can place initial boundary values in the derivative stencil.
+    if n<5 {last[n]=yp;}
+    if n-1<5 {last[n-1]=y;}
     for j in (0..=n-2).rev() {
         if j % 4096 == 0 && cancel() {return None}
         let r=inner+(j as f64)*h;
@@ -109,6 +112,13 @@ mod tests {
     use super::*;
     fn fixture()->Request { Request {version:1,kind:0,l:0,reserved:0,daughter_z:0.0,reduced_mass_mev:3657.0,q_mev:5.0,depth_mev:0.0,radius_fm:7.0,diffuseness_fm:0.65,charge_radius_fm:7.0,lead_radius_fm:2.0,match_radius_fm:20.0,step_fm:0.01} }
     #[test] fn free_particle_transmission() { let p=fixture(); let r=calculate(&p); assert_eq!(r.status,0); assert!(r.log10_transmission.abs()<1e-5); }
+    #[test] fn coarse_mesh_stencil_includes_boundary_values() {
+        for n in [4,5,6] {
+            let k=0.2_f64;
+            let got=propagate(0.0,1.0,1.0/(n as f64),k,k,|_|-k*k,|r|Some(C::new((k*r).cos(),(k*r).sin())),&||false).unwrap();
+            assert!(got.abs()<1e-5,"{n} intervals: {got}");
+        }
+    }
     #[test] fn analytic_potential_step() {
         let mut p=fixture(); p.depth_mev=10.0;
         let t=solve_once(&p,0.00005,20.0,&||false).unwrap();
