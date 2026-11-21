@@ -26,6 +26,13 @@ defmodule CampaignTest do
     events = File.read!(Path.join(dir, "events.jsonl"))
     assert length(Regex.scan(~r/"event":"succeeded"/, events)) == 1
     assert events =~ "recovered"
+    File.write!(Path.join(dir, "events.jsonl"), String.trim_trailing(events, "\n"))
+    {:ok, pid3} = Campaign.start_link(dir: dir, manifest: manifest, scheduler: "/missing", core: "unused")
+    ref3 = Process.monitor(pid3)
+    assert_receive {:DOWN, ^ref3, :process, ^pid3, :normal}, 5000
+    {:ok, pid4} = Campaign.start_link(dir: dir, manifest: manifest, scheduler: "/missing", core: "unused")
+    ref4 = Process.monitor(pid4)
+    assert_receive {:DOWN, ^ref4, :process, ^pid4, :normal}, 5000
   end
   test "retries an infrastructure crash and records attempts" do
     dir = Path.join(System.tmp_dir!(), "retry-#{System.unique_integer([:positive])}")

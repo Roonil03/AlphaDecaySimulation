@@ -79,12 +79,15 @@ defmodule Campaign do
   end
   defp recover_history(dir, ids) do
     path = Path.join(dir, "events.jsonl")
-    lines = if File.exists?(path), do: String.split(File.read!(path), "\n", trim: true), else: []
+    content = if File.exists?(path), do: File.read!(path), else: ""
+    lines = String.split(content, "\n", trim: true)
     decoded = Enum.map(lines, &Jason.decode/1)
     valid = Enum.take_while(decoded, &match?({:ok, _}, &1))
     if length(valid) != length(decoded) do
       if length(valid) != length(decoded) - 1, do: raise("corrupt campaign event history")
       atomic_write(path, Enum.map_join(valid, "", fn {:ok, item} -> Jason.encode!(item) <> "\n" end))
+    else
+      if content != "" and not String.ends_with?(content, "\n"), do: atomic_write(path, content <> "\n")
     end
     succeeded = for {:ok, %{"event" => "succeeded", "id" => id}} <- valid, do: id
     for id <- ids, File.exists?(result_path(dir, id)), id not in succeeded, do: event(dir, %{event: "succeeded", id: id, recovered: true})
