@@ -21,3 +21,7 @@ For a change or improvement to a model, data value or scientific claim, link the
 Explain how the change was validated [checked against an independent reference], including reference cases, expected results, tolerances and the source of each reference. State limitations and cases outside the model's scope. Add or update tests and provenance notes where needed. Numerical agreement for selected cases does not by itself establish general physical accuracy. The [model notes](docs/spherical-models.md) show how sources and limitations are recorded here.
 
 For a code, documentation or other change that does not alter a scientific claim, cite the relevant issue or documentation instead. A research paper is not required for such a fix.
+
+## Submit a pull request
+
+Describe the behavior before and after the change. Link the issue or supporting sources, list the checks you ran, and identify any remaining limitations. Include representative inputs and outputs when they help a reviewer reproduce the result. Do not include secrets or vulnerability details in a public issue or pull request; follow [SECURITY.md](SECURITY.md) instead.
