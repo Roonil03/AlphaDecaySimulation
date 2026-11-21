@@ -1,49 +1,13 @@
-**Native migration:** The C++20 offline application and its build/CLI instructions are in [native/README.md](native/README.md). The service and older desktop documentation below remains available during migration.
+# Alpha Decay Planetarium
 
-# Alpha-decay observatory
+Explore alpha-decay barrier estimates in a native C++ desktop application. The viewer and command-line interface use the same authoritative C++ core. Models are illustrative and their input parameters and assumptions are not experimental uncertainty estimates.
 
-A reproducible alpha-decay demonstration connecting a barrier calculation, published empirical estimates and a seeded population simulation. The default is Po-212. The offline catalog includes 13 legacy comparison channels and two separately reported Ren half-life-fit holdouts, Dy-154 and Os-186, plus support for custom nuclei.
+Download the Windows or Linux `AlphaDecay` artifact from a successful [Tests workflow run](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/ci.yml). On Windows extract the archive and run `AlphaDecay.exe`; the executable includes the catalog and dependency notices. On Linux extract the provided `AlphaDecay-linux.tar.gz` and run `./AlphaDecay`. The Linux artifact targets Ubuntu 24.04 x86-64 with glibc 2.39 or newer, X11 and an OpenGL 3.3 implementation. See [installation instructions](install.md).
 
-## Windows desktop
+The desktop displays the catalog, spherical radial potential and decay estimates. The external Coulomb plus centrifugal WKB model, finite spherical well and Woods–Saxon models are described in [native documentation](native/README.md), [external model notes](docs/external-model.md), and [spherical model notes](docs/spherical-models.md). Deformed channels, Numerov comparisons and parameter uncertainty are documented in [deformed channels](docs/deformed-channels.md) and the [solver notes](rust/numerov/README.md). Qi and Ren empirical estimates are separate comparisons; agreement with selected measurements does not establish independent validation. Catalog measured values are alpha partial half-lives where stated.
 
-Download and extract the `AlphaDecay-windows` artifact from a successful [Tests workflow run](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/ci.yml), then double-click `AlphaDecay.exe`. A source build writes `dist\AlphaDecay.exe`. The executable embeds the catalog and both comparison reports; no browser, Docker, Python, web service or adjacent data file is required. See [install.md](install.md) for the full instructions.
+The core also supports `AlphaDecay --run`: send one version 1 JSON request on standard input and read one JSON result on standard output. Invalid requests exit nonzero with a JSON error on standard error. `AlphaDecay --self-test` checks embedded reference calculations and `AlphaDecay --credits` displays bundled dependency notices. See [native documentation](native/README.md) for the request schema, valid ranges and status semantics.
 
-Select **Dy-154** or **Os-186** in the offline app's Reference isotope selector and choose **Ren shell** to inspect a holdout's prediction, measured partial half-life and uncertainty. The measured-reference panel identifies the holdout and its source. [HOLDOUT.md](observatory/HOLDOUT.md) explains why these two channels qualify under Ren's published half-life-fit selection, their uncertainties, and the limits of that inference. The 13 legacy channels can overlap the published fits and are not independent validation. The two-channel holdout is too small to establish general model performance.
+Optional local [research tools](research/README.md) include a bounded Go scheduler, an Elixir campaign supervisor, Python calibration and plots, Lean proofs and an experimental Astro language sketch. They call the native executable for physics predictions. The [Research tools workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/research.yml) supplies optional platform-specific research bundles. The Python compatibility client can be run as `python -m observatory --core /path/to/AlphaDecay`; `--validate` and `--validate-holdout` report catalog comparisons.
 
-## Optional command-line and services
-
-The Python CLI and the kernel, ensemble, and gateway remain available for reproducible calculations. Install Python 3 and Docker with Compose, then run:
-
-```sh
-python -m unittest discover -s tests -p 'test_*.py' -v
-docker compose up --build -d
-python -m unittest discover -s tests -p 'integration.py' -v
-python -m observatory
-python -m observatory --isotope Ra-224
-python -m observatory --z 84 --a 212 --q 8.9542 --binding 1655.7716856
-python -m observatory --validate
-python -m observatory --validate-holdout
-# When finished:
-docker compose down
-```
-
-The Python CLI has no third-party dependencies; `--help` describes options, including `--model baseline`, `--population`, `--seed`, and `--url`. For custom inputs, `--binding` is optional total parent nuclear binding energy in MeV. Calculations retry transient startup failures for up to 60 seconds per request. A fixed seed reproduces the sample for a given implementation, but random streams are not promised across versions.
-
-The central output contains all available predictions. By default survival uses the shell estimate when available, otherwise Qi's estimate, otherwise the WKB baseline. `selected_model` identifies which was used. Simulation times are multiples of the selected predicted half-life (clamped for extreme values). The ±0.1 MeV sweep is a sensitivity illustration, not an experimental uncertainty or fitted confidence interval. For a custom Q the sweep must remain within the kernel's allowed energy range.
-
-Catalog measurements concern the specified **ground-state channel**. The desktop also accepts custom angular momentum; a measured residual is shown only when Z, A, Q and ℓ match the catalog transition. A partial half-life is the lifetime that channel would have if acting alone. The survival curve assumes that single constant-rate channel, independent nuclei and no production; where competing channels exist it is not the physical total-parent survival curve, which requires the sum of all decay rates. This is not a detector simulation.
-
-## Benchmark and sources
-
-[observatory/isotopes.json](observatory/isotopes.json) is the canonical catalog. Q values and most parent half-lives are from [Cai et al. (2020), Table VII](https://doi.org/10.1103/PhysRevC.101.054304), using their underlying evaluated data; ground-state branch fractions are recorded separately with source links. Partial half-life equals total half-life divided by the absolute ground-state alpha branch fraction. The Ra-220 fraction is an approximation from the 1% excited-state branch in Cai Table VIII; Sm and Po-212 branches are approximated as 100%. Po-212 uses the later [Belli et al. (2021)](https://doi.org/10.1140/epja/s10050-021-00510-y) 295.1 ns measurement. Sm-146 uses the [2024 direct measurement](https://www.nature.com/articles/s41598-024-64104-6) of 92.0 Ma, in place of the older disputed value. Uncertainties and the small approximation in branch fractions are not propagated into the reported errors.
-
-Total parent binding energies are AME2020 binding energy per nucleon multiplied by A, in MeV, from the [official unrounded mass table](https://www-nds.iaea.org/amdc/ame2020/mass_1.mas20.txt); the selected entries are not marked extrapolated there. The Q values are total transition energies, not emitted alpha kinetic energies.
-
-`python -m observatory --validate` reports each log10(prediction/partial-half-life) and mean absolute and root-mean-square errors in log10 seconds, with denominators, for all available estimates. [observatory/validation.json](observatory/validation.json) records a run generated with `python -m observatory --url http://127.0.0.1:18081 --validate` against the formation kernel (use the default gateway URL after Compose starts). Across 13 channels, baseline, Qi and shell MAE are 0.729, 0.371 and 0.110 log10 seconds, respectively; RMSE is 0.763, 0.455 and 0.120. Qi is worse than the baseline for Po-208 and Po-210: absolute errors are 0.825 versus 0.506 and 1.014 versus 0.671, respectively. Po-210 is at the N=126 shell closure; Po-208 lies below it. Positive error means the predicted half-life is too long. WKB uses l=0, radius 9 fm, preformation 0.1 and assault frequency 10²¹ s⁻¹ for every channel, illustrative assumptions rather than fitted parameters.
-
-The research estimate uses the alpha-only universal decay law of [Qi et al.](https://doi.org/10.1103/PhysRevLett.103.072501), fitted to 139 even-even alpha transitions with Z=78–108. Sm (Z=62) and custom values outside that range are extrapolations. The shell estimate implements [Ren et al. (2026)](https://cpc.ihep.ac.cn/article/doi/10.1088/1674-1137/ae167b), a global fit to 550 alpha decays across even-even, even-odd, odd-even and odd-odd cases, including 190 even-even l=0 cases, using measured binding energies. Both are empirical, and their original fitting data may overlap these catalog nuclei: this comparison is not an independent out-of-sample validation. No coefficients are fitted by this project. Neither estimate is available for odd parent Z or A, or nonzero l. The simplified WKB baseline omits nuclear structure, deformation and uncertainty; models can be worse for individual nuclei even when aggregate errors improve.
-
-Compose builds kernel, ensemble and gateway services. The gateway exposes `POST /v1/barrier` and `POST /v1/ensemble`; each service has `GET /health`. See [services documentation](services/README.md) for contracts and domain limits. The desktop visualization is illustrative, not a new decay theory or first simulation.
-
-
-
+Build from source with CMake, a C++20 compiler, Rust/Cargo, Git and OpenGL development libraries. CMake fetches pinned dependency revisions. The build and test commands, Linux packages, and platform details are in [install.md](install.md). Attribution and dependencies are listed in [CREDITS.md](CREDITS.md).

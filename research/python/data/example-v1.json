@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "dataset_version": "example-1",
+  "description": "Illustrative values only; not a scientific calibration dataset.",
+  "cases": [
+    {"id":"example-po212", "split":"calibration", "log10_half_life_s":-6.52,
+     "request":{"parent_z":84,"parent_a":212,"q_mev":8.9542,"l":0,"radius_fm":9.0}},
+    {"id":"example-po210", "split":"validation", "log10_half_life_s":7.08,
+     "request":{"parent_z":84,"parent_a":210,"q_mev":5.4075,"l":0,"radius_fm":9.0}}
+  ]
+}
