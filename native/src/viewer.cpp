@@ -38,6 +38,13 @@
 #include <vector>
 using json = nlohmann::json;
 namespace {
+std::runtime_error glfw_failure(const char *operation) {
+  const char *description = nullptr;
+  const int code = glfwGetError(&description);
+  return std::runtime_error(std::string(operation) + " (GLFW " +
+                            std::to_string(code) + "): " +
+                            (description ? description : "no driver diagnostic"));
+}
 std::string time_label(double log_seconds) {
   struct Unit {
     const char *name;
@@ -131,10 +138,27 @@ GLuint shader(GLenum type, const char *source) {
   glCompileShader(s);
   GLint ok;
   glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
-  if (!ok)
-    throw std::runtime_error("shader compilation failed");
+  if (!ok) {
+    char message[2048] = {};
+    glGetShaderInfoLog(s, sizeof(message), nullptr, message);
+    glDeleteShader(s);
+    throw std::runtime_error(std::string("shader compilation failed: ") + message);
+  }
   return s;
 }
+// Keep the context alive until all scene and ImGui resources have unwound,
+// including preview argument/calculation failures and backend init errors.
+struct ViewerRuntime {
+  GLFWwindow *window = nullptr;
+  bool imgui = false, glfw_backend = false, opengl_backend = false;
+  ~ViewerRuntime() {
+    if (opengl_backend) ImGui_ImplOpenGL3_Shutdown();
+    if (glfw_backend) ImGui_ImplGlfw_Shutdown();
+    if (imgui) ImGui::DestroyContext();
+    if (window) glfwDestroyWindow(window);
+    glfwTerminate();
+  }
+};
 struct Scene {
   GLuint program = 0, vao = 0, vbo = 0, ebo = 0;
   int count = 0;
@@ -156,8 +180,14 @@ struct Scene {
     glLinkProgram(program);
     GLint ok;
     glGetProgramiv(program, GL_LINK_STATUS, &ok);
-    if (!ok)
-      throw std::runtime_error("shader link failed");
+    if (!ok) {
+      char message[2048] = {};
+      glGetProgramInfoLog(program, sizeof(message), nullptr, message);
+      glDeleteShader(v);
+      glDeleteShader(f);
+      glDeleteProgram(program);
+      throw std::runtime_error(std::string("shader link failed: ") + message);
+    }
     glDeleteShader(v);
     glDeleteShader(f);
     std::vector<float> mesh;
@@ -208,17 +238,20 @@ struct Scene {
     float cy = cos(yaw), sy = sin(yaw), cx = cos(pitch), sx = sin(pitch),
           aspect = float(w) / h;
     float scale = .115f * zoom;
+    // Orthographic zoom changes the visible X/Y extent, not the clipping
+    // planes. Scaling depth as well cut holes in the shell at high zoom.
+    constexpr float depth_scale = .08f;
     float m[16] = {scale * cy / aspect,
                    scale * sx * sy,
-                   scale * cx * sy,
+                   depth_scale * cx * sy,
                    0,
                    0,
                    scale * cx,
-                   -scale * sx,
+                   -depth_scale * sx,
                    0,
                    -scale * sy / aspect,
                    scale * sx * cy,
-                   scale * cx * cy,
+                   depth_scale * cx * cy,
                    0,
                    .35f,
                    0,
@@ -263,9 +296,15 @@ int viewer(int argc, char **argv) {
         "usage: AlphaDecay [--run|--self-test|--render-preview path "
         "[catalog-id [width height [external|square_well|woods_saxon [beta2 beta4]]]]]");
   int width = 1280, height = 800;
+  auto integer_argument = [](const char *text) {
+    size_t used = 0;
+    const int value = std::stoi(text, &used);
+    if (text[used] != '\0') throw std::invalid_argument("invalid preview dimension");
+    return value;
+  };
   if (argc >= 6) {
-    width = std::stoi(argv[4]);
-    height = std::stoi(argv[5]);
+    width = integer_argument(argv[4]);
+    height = integer_argument(argv[5]);
     if (width < 640 || height < 480 || width > 4096 || height > 4096)
       throw std::invalid_argument("preview size outside 640x480 to 4096x4096");
   }
@@ -283,8 +322,28 @@ int viewer(int argc, char **argv) {
     if (id != argv[3])
       throw std::invalid_argument("unknown catalog id");
   }
+  int preview_potential = 0;
+  alpha::Deformation preview_deformation;
+  if (argc >= 7) {
+    const std::string name = argv[6];
+    if (name == "square_well") preview_potential = 1;
+    else if (name == "woods_saxon") preview_potential = 2;
+    else if (name != "external") throw std::invalid_argument("unknown preview potential");
+  }
+  if (argc == 9) {
+    if (!preview_potential) throw std::invalid_argument("deformed preview requires a nuclear potential");
+    auto real_argument = [](const char *text) {
+      size_t used = 0;
+      const double value = std::stod(text, &used);
+      if (text[used] != '\0') throw std::invalid_argument("invalid preview deformation");
+      return value;
+    };
+    preview_deformation = {real_argument(argv[7]), real_argument(argv[8])};
+    (void)alpha::deformed_radius(1, preview_deformation, 0);
+  }
   if (!glfwInit())
-    throw std::runtime_error("GLFW initialization failed");
+    throw glfw_failure("GLFW initialization failed");
+  ViewerRuntime runtime;
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -292,9 +351,9 @@ int viewer(int argc, char **argv) {
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
   GLFWwindow *window = glfwCreateWindow(
       width, height, "Alpha Decay Planetarium", nullptr, nullptr);
+  runtime.window = window;
   if (!window) {
-    glfwTerminate();
-    throw std::runtime_error("OpenGL 3.3 window creation failed");
+    throw glfw_failure("OpenGL 3.3 window creation failed");
   }
   glfwMakeContextCurrent(window);
   glfwSwapInterval(preview ? 0 : 1);
@@ -302,11 +361,14 @@ int viewer(int argc, char **argv) {
     throw std::runtime_error("OpenGL loader failed");
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
+  runtime.imgui = true;
   ImGui::StyleColorsDark();
   ImGui::GetIO().FontGlobalScale = 1.15f;
   ImGui::GetIO().IniFilename = nullptr;
-  ImGui_ImplGlfw_InitForOpenGL(window, true);
-  ImGui_ImplOpenGL3_Init("#version 330 core");
+  runtime.glfw_backend = ImGui_ImplGlfw_InitForOpenGL(window, true);
+  if (!runtime.glfw_backend) throw std::runtime_error("ImGui GLFW initialization failed");
+  runtime.opengl_backend = ImGui_ImplOpenGL3_Init("#version 330 core");
+  if (!runtime.opengl_backend) throw std::runtime_error("ImGui OpenGL initialization failed");
   {
     Scene scene;
     alpha::Request request;
@@ -334,6 +396,7 @@ int viewer(int argc, char **argv) {
     std::vector<GuiChannel> channel_inputs(1);
     json channel_result;
     std::future<json> channel_job; auto channel_cancel=std::make_shared<std::atomic_bool>(false); bool discard_channel=false;
+    bool calculate_pending = false;
     std::optional<double> combined_log_half;
     std::string error;
     char fit_path[1024] = {};
@@ -348,7 +411,7 @@ int viewer(int argc, char **argv) {
           {r * xy * std::cos(phi), r * z, r * xy * std::sin(phi), u(rng)});
     }
     auto select = [&] {
-      channel_cancel->store(true); discard_channel=true; combined_log_half.reset();
+      channel_cancel->store(true); discard_channel=true; combined_log_half.reset(); channel_result=json{};
 #ifdef ALPHA_ENABLE_NUMEROV
       analysis_cancel->store(true); discard_analysis=true; analysis_result.reset();
 #endif
@@ -374,7 +437,10 @@ int viewer(int argc, char **argv) {
       return input;
     };
     auto calculate = [&] {
-      if (channel_job.valid()) return;
+      // Isotope selection also calculates. Let a cancelled job finish before
+      // starting its replacement, without losing that requested calculation.
+      if (channel_job.valid()) { calculate_pending = true; return; }
+      calculate_pending = false;
       try {
         reference_available = false;
         result = {};
@@ -392,6 +458,9 @@ int viewer(int argc, char **argv) {
           if (reference_available) result=*calculation.external_reference;
           auto input=alpha::make_spherical_wkb_request(request,v);
           if (advanced) {
+            // The render path uses this shape before the background result is
+            // ready, so validate it synchronously as part of Calculate.
+            (void)alpha::deformed_radius(1, {beta2,beta4}, 0);
             json data={{"deformation",{{"beta2",beta2},{"beta4",beta4}}},{"channels",json::array()}};
             if(parent_known) data["parent_spin"]={{"twice_j",parent_twice_j},{"parity",parent_parity}};
             if(competing_enabled) data["competing_rate_hz"]=competing_rate;
@@ -422,24 +491,18 @@ int viewer(int argc, char **argv) {
       }
     };
     select();
-    if (argc >= 7) {
-      const std::string preview_model=argv[6];
-      if (preview_model == "square_well") potential_model=1;
-      else if (preview_model == "woods_saxon") potential_model=2;
-      else if (preview_model != "external") throw std::invalid_argument("unknown preview potential");
-    }
-    if(argc==9) {
-      if(!potential_model) throw std::invalid_argument("deformed preview requires a nuclear potential");
-      beta2=std::stod(argv[7]); beta4=std::stod(argv[8]); advanced=true; barrier=true;
-    }
+    potential_model = preview_potential;
+    if(argc==9) { beta2=preview_deformation.beta2; beta4=preview_deformation.beta4; advanced=true; barrier=true; }
     calculate();
     auto poll_channels = [&] {
       if(channel_job.valid() && channel_job.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
         try { auto value=channel_job.get(); if(!discard_channel) { channel_result=std::move(value); if(!channel_result["log10_total_half_life_s"].is_null()) combined_log_half=channel_result["log10_total_half_life_s"].get<double>(); } }
         catch(const std::exception& e) { if(!discard_channel) {valid=false; error=e.what();} }
+        if (calculate_pending) calculate();
       }
     };
     if(preview && channel_job.valid()) {channel_job.wait(); poll_channels();}
+    if(preview && !valid) throw std::runtime_error("preview calculation failed: " + error);
     auto selected_log = [&]() -> std::optional<double> {
       if (!valid) return {};
       if (advanced && potential_model && model == 0) return combined_log_half;
@@ -463,19 +526,13 @@ int viewer(int argc, char **argv) {
       glfwGetFramebufferSize(window, &w, &h);
       if (w <= 0 || h <= 0)
         continue;
-      bool model_available = selected_log().has_value();
-      scene.draw(w, h, points,
-                 model_available ? 1 - std::exp(-std::log(2.0) * elapsed) : 1,
-                 barrier && valid,
-                 valid && (!potential_model || alternative.outer_turning_fm) ?
-                     (potential_model ? (advanced ? nuclear_radius : alternative.inner_turning_fm.value_or(nuclear_radius)) / *alternative.outer_turning_fm : request.radius_fm / result.outer_turning_fm) : 0,
-                 valid && potential_model && advanced ? alpha::Deformation{beta2,beta4} : alpha::Deformation{});
       ImGui_ImplOpenGL3_NewFrame();
       ImGui_ImplGlfw_NewFrame();
       ImGui::NewFrame();
       ImGui::SetNextWindowPos(ImVec2(12, 12), ImGuiCond_Always);
       ImGui::SetNextWindowSize(
-          ImVec2(std::min(470.0f, float(w) - 24), float(h) - 24),
+          ImVec2(std::min(470.0f, ImGui::GetIO().DisplaySize.x - 24),
+                 ImGui::GetIO().DisplaySize.y - 24),
           ImGuiCond_Always);
       ImGui::Begin("Alpha Decay Planetarium", nullptr,
                    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
@@ -620,7 +677,8 @@ int viewer(int argc, char **argv) {
         changed = true;
       }
       if (changed) {
-        channel_cancel->store(true); discard_channel=true; combined_log_half.reset();
+        channel_cancel->store(true); discard_channel=true; combined_log_half.reset(); channel_result=json{};
+        calculate_pending = false;
 #ifdef ALPHA_ENABLE_NUMEROV
         analysis_cancel->store(true); discard_analysis=true; analysis_result.reset();
 #endif
@@ -630,7 +688,10 @@ int viewer(int argc, char **argv) {
       }
       if (channel_job.valid()) {
         ImGui::TextUnformatted("Calculating channels in background...");
-        if (ImGui::Button("Cancel channels")) {channel_cancel->store(true); discard_channel=true;}
+        if (ImGui::Button("Cancel channels")) {
+          channel_cancel->store(true); discard_channel=true; calculate_pending=false;
+          valid=false; playing=false; channel_result=json{}; combined_log_half.reset();
+        }
       } else if (ImGui::Button("Calculate")) calculate();
       ImGui::SameLine();
       if (!error.empty())
@@ -639,7 +700,7 @@ int viewer(int argc, char **argv) {
 #ifdef ALPHA_ENABLE_NUMEROV
       if (analysis_job.valid() && analysis_job.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
         try { auto finished=analysis_job.get(); if (!discard_analysis) analysis_result=std::move(finished); }
-        catch (const std::exception& e) { error=e.what(); }
+        catch (const std::exception& e) { if (!discard_analysis) error=e.what(); }
       }
       if (potential_model && ImGui::TreeNode("Numerov and parameter uncertainty")) {
         bool options_changed=false;
@@ -724,7 +785,7 @@ int viewer(int argc, char **argv) {
         ImGui::Text("Survivors: %d sampled / %.1f expected of 180", sampled,
                     180 * survival);
       }
-      if(valid && potential_model && advanced && ImGui::TreeNode("Channel results")) {
+      if(valid && potential_model && advanced && channel_result.is_object() && channel_result.contains("channels") && ImGui::TreeNode("Channel results")) {
         ImGui::TextWrapped(competing_enabled ? "Branches include the supplied competing rate." : "Branches are conditional on alpha decay.");
         if(combined_log_half) ImGui::Text(competing_enabled ? "Total log10 half-life: %.8g" : "Alpha-only log10 half-life: %.8g",*combined_log_half);
         for(const auto& row:channel_result["channels"]) {
@@ -823,7 +884,9 @@ int viewer(int argc, char **argv) {
       }
       ImGui::Checkbox("Single nucleus / barrier view", &barrier);
       ImGui::PopItemWidth();
-      if (barrier && advanced && potential_model)
+      if (barrier && valid && potential_model && !alternative.outer_turning_fm)
+        ImGui::TextWrapped("No outer turning radius is available for this result; barrier geometry is unavailable.");
+      else if (barrier && advanced && potential_model)
         ImGui::TextWrapped("Blue: volume-normalized nuclear radius R(theta). Gold: spherical-reference outer turning radius; barrier and orientation-dependent turning surfaces are schematic.");
       else if (barrier)
         ImGui::TextWrapped("Blue: inner barrier boundary; gold wireframe: outer turning "
@@ -832,7 +895,8 @@ int viewer(int argc, char **argv) {
       else
         ImGui::TextWrapped(
             "Each sphere is an independently sampled nucleus; positions and "
-            "sizes are illustrative. Competing branches are excluded.");
+            "sizes are illustrative. Survival follows the selected playback "
+            "half-life; disappearance does not identify a decay channel.");
       ImGui::TextWrapped("Drag the scene to orbit; scroll to zoom.");
       ImGui::End();
       ImGuiIO &io = ImGui::GetIO();
@@ -845,6 +909,16 @@ int viewer(int argc, char **argv) {
         scene.zoom = std::clamp(scene.zoom + io.MouseWheel * .1f, .4f, 2.5f);
       }
       ImGui::Render();
+      // Use the final input/result state for this frame, including edits and
+      // cancellation handled above; never mix new inputs with the old scene.
+      const bool model_available = selected_log().has_value();
+      const bool turning_available = valid && (!potential_model || alternative.outer_turning_fm.has_value());
+      scene.draw(w, h, points,
+                 model_available && !(barrier && !turning_available) ? 1 - std::exp(-std::log(2.0) * elapsed) : 1,
+                 barrier && turning_available,
+                 turning_available ?
+                     (potential_model ? (advanced ? nuclear_radius : alternative.inner_turning_fm.value_or(nuclear_radius)) / *alternative.outer_turning_fm : request.radius_fm / result.outer_turning_fm) : 0,
+                 valid && potential_model && advanced ? alpha::Deformation{beta2,beta4} : alpha::Deformation{});
       ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
       if (preview && ++frames >= 2) {
         png(argv[2], w, h);
@@ -857,11 +931,6 @@ int viewer(int argc, char **argv) {
     analysis_cancel->store(true);
 #endif
   }
-  ImGui_ImplOpenGL3_Shutdown();
-  ImGui_ImplGlfw_Shutdown();
-  ImGui::DestroyContext();
-  glfwDestroyWindow(window);
-  glfwTerminate();
   return 0;
 }
 

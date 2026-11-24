@@ -56,6 +56,7 @@ add_test(NAME channels COMMAND channels_test)
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
   add_test(NAME cli-contract COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/native/tests/contract.py $<TARGET_FILE:AlphaDecay>)
+  add_test(NAME viewer-contract COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/native/tests/viewer_contract.py $<TARGET_FILE:AlphaDecay>)
 endif()
 
 
