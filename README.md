@@ -8,6 +8,16 @@ Download the `AlphaDecay-Windows` or `AlphaDecay-Linux` artifact from a successf
 
 Choose an isotope and calculate its decay estimate. Drag the scene to orbit and scroll to zoom. The population view draws independently sampled nuclei with illustrative positions and sizes. **Single nucleus / barrier view** shows the inner boundary in blue and the outer turning radius as a gold wireframe. Deformed shapes show the nuclear surface. Their barrier and turning surfaces are schematic. The potential plot and half-life change with the selected model and inputs.
 
+## Inside the viewer
+
+![Po-212 population view at time zero, with 180 blue nuclei and the calculated and measured half-lives in the control panel.](docs/screenshots/po212-population.png)
+
+For Po-212, the external barrier model gives **768 ns** with the inputs shown. The measured partial half-life for this decay channel is **295.1 ns**. Press **Play** to see the sampled population decay. The positions and sizes of the nuclei are illustrative.
+
+![Po-212 single-nucleus view with a blue deformed nuclear surface inside a gold wireframe sphere.](docs/screenshots/po212-barrier.png)
+
+With the **Woods-Saxon** potential and **Deformation and daughter channels** enabled, the blue surface shows the assumed nuclear shape. The gold wireframe marks the outer turning radius of the spherical reference calculation. The barrier drawing is schematic.
+
 ## Command-line example
 
 The same C++ core also accepts one JSON [structured text] request through standard input. For example, in PowerShell from the folder containing the Windows executable:
