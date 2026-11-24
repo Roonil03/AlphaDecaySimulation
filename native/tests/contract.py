@@ -36,6 +36,21 @@ class Contract(unittest.TestCase):
         self.assertEqual(proc.stderr, '')
         self.assertEqual(json.loads(proc.stdout)['schema_version'], 1)
 
+    def test_json_whitespace_bytes(self):
+        payload = json.dumps(BASE).encode('utf-8')
+        # C++ stream whitespace includes VT/FF; JSON permits only SP/HT/LF/CR.
+        for suffix in (b'\x0b', b'\x0c', b' \t\r\n\x0b', b' \t\r\n\x0c'):
+            proc = subprocess.run([EXE, '--run'], input=payload + suffix,
+                                  capture_output=True)
+            self.assertNotEqual(proc.returncode, 0, suffix)
+            self.assertEqual(proc.stdout, b'')
+            self.assertIn('error', json.loads(proc.stderr))
+        proc = subprocess.run([EXE, '--run'], input=payload + b' \t\r\n',
+                              capture_output=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stderr, b'')
+        self.assertEqual(json.loads(proc.stdout)['schema_version'], 1)
+
     def test_malformed_json_and_nested_types(self):
         for raw in ('', 'null', '[]', '{"schema_version":',
                     json.dumps(BASE).replace('8.9542', 'NaN'),

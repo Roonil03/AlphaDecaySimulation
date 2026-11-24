@@ -201,11 +201,7 @@ static void self_test() {
 int main(int argc, char **argv) {
   try {
     if (argc == 2 && std::string(argv[1]) == "--run") {
-      json j;
-      std::cin >> j;
-      std::cin >> std::ws;
-      if (!std::cin.eof())
-        throw std::invalid_argument("expected exactly one JSON request");
+      const auto j = json::parse(std::cin);
       std::cout << run_request(j).dump() << '\n';
       return 0;
     }
