@@ -1,4 +1,5 @@
 /.worktrees/
+/.verification-artifacts/
 venv/
 .venv/
 __pycache__/
