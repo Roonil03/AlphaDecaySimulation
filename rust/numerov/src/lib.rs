@@ -152,6 +152,41 @@ mod tests {
         let mut p=fixture(); p.q_mev=-1.0; assert_eq!(calculate(&p).status,2);
         let mut out=result(0,""); unsafe { assert_eq!(alpha_numerov_solve(std::ptr::null(),&mut out),-1); assert_eq!(alpha_numerov_solve(&p,std::ptr::null_mut()),-1); assert_eq!(alpha_numerov_solve(&p,&mut out),0); } assert_eq!(out.status,2);
     }
+    #[test] fn numerical_domain_bounds_are_explicit() {
+        // Test validation without allocating the potentially five-million-point
+        // grids admitted at the smallest step or largest exterior radius.
+        macro_rules! bounds {
+            ($field:ident, $lo:expr, $hi:expr, $below:expr, $above:expr) => {{
+                for value in [$lo, $hi] {
+                    let mut p=fixture(); p.depth_mev=1e5; p.$field=value;
+                    assert!(valid(&p),"{}={}",stringify!($field),value);
+                }
+                for value in [$below, $above, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                    let mut p=fixture(); p.depth_mev=1e5; p.$field=value;
+                    assert!(!valid(&p),"{}={}",stringify!($field),value);
+                }
+            }};
+        }
+        bounds!(daughter_z,0.0,130.0,-1.0,130.0001);
+        bounds!(reduced_mass_mev,1.0,1e6,0.999,1e6+1.0);
+        bounds!(q_mev,1e-10,1000.0,0.0,1000.0001);
+        bounds!(depth_mev,0.0,1e5,-0.001,1e5+1.0);
+        bounds!(radius_fm,1e-3,1e4,0.000999,1e4+1.0);
+        bounds!(diffuseness_fm,1e-4,1e4,0.0000999,1e4+1.0);
+        bounds!(charge_radius_fm,1e-3,1e4,0.000999,1e4+1.0);
+        bounds!(step_fm,1e-5,100.0,0.00000999,100.0001);
+        bounds!(match_radius_fm,2.001,1e5,2.0,1e5+1.0);
+        bounds!(lead_radius_fm,1e-3,19.0,0.000999,20.0);
+        for ell in [-1,101,i32::MAX] {
+            let mut p=fixture(); p.l=ell; assert!(!valid(&p));
+        }
+        for ell in [0,100] {
+            let mut p=fixture(); p.depth_mev=1e5; p.l=ell; assert!(valid(&p));
+        }
+        let mut p=fixture(); p.reserved=1; assert!(!valid(&p));
+        p=fixture(); p.kind=2; assert!(!valid(&p));
+        p=fixture(); p.version=2; assert!(!valid(&p));
+    }
     #[test] fn coulomb_solution_checks_exterior() {
         let mut p=fixture(); p.daughter_z=50.0; p.depth_mev=100.0; p.lead_radius_fm=5.0; p.match_radius_fm=500.0; p.step_fm=0.02;
         let r=calculate(&p); assert!(r.status<=1,"{}",String::from_utf8_lossy(&r.message)); assert!(r.match_error_decades<1e-4,"{}",r.match_error_decades);
