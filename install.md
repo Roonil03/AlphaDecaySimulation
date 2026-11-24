@@ -2,7 +2,7 @@
 
 ## Windows
 
-Download `AlphaDecay-Windows` from a successful [Tests workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/ci.yml) run and extract the artifact, the files saved by that run. You need access to this private repository and its workflow artifacts. Run `AlphaDecay.exe` directly. It includes its catalog, report data and dependency notices. The viewer needs a working OpenGL 3.3 graphics driver. `AlphaDecay.exe --self-test` checks embedded numerical cases and `AlphaDecay.exe --credits` prints dependency notices.
+Download `AlphaDecay-Windows` from a successful [Tests workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/ci.yml) run and extract the artifact, the files saved by that run. You need access to this repository and its workflow artifacts. Run `AlphaDecay.exe` directly. It includes its catalog, report data and dependency notices. The viewer needs a working OpenGL 3.3 graphics driver. `AlphaDecay.exe --self-test` checks embedded numerical cases and `AlphaDecay.exe --credits` prints dependency notices.
 
 For a source build install Git, CMake 3.21+, Rust/Cargo 1.75+ and Visual Studio with the C++ desktop workload, then:
 
