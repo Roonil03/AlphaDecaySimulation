@@ -8,6 +8,14 @@
 using namespace alpha;
 void check(bool pass, const char* message) { if (!pass) throw std::runtime_error(message); }
 void near(double a, double b, double tol, const char* message) { check(std::abs(a-b)<=tol,message); }
+template<class F> long double bisect_reference(F f, long double a, long double b) {
+    const bool positive=f(a)>0;
+    for (int i=0;i<100;++i) {
+        const long double m=(a+b)/2;
+        if ((f(m)>0)==positive) a=m; else b=m;
+    }
+    return (a+b)/2;
+}
 int main() {
     try {
         SphericalWkbRequest request;
@@ -38,6 +46,57 @@ int main() {
         request.q_mev=5; p.kind=PotentialKind::woods_saxon; p.nuclear_radius_fm=7; p.charge_radius_fm=7;
         result=calculate_spherical_wkb(request);
         check(result.status=="ok" && *result.outer_turning_fm>*result.inner_turning_fm && *result.action>0,"Woods-Saxon barrier");
+        {
+            auto peak_request=request;
+            peak_request.q_mev=22.80425893924691;
+            // Independent analytic derivative brackets the smooth maximum. Q
+            // lies above every old .02-fm scan sample but below this maximum.
+            const auto reference_potential=[](long double r) {
+                return 2*82*1.43996448L/r-100/(1+std::exp((r-7)/.65L));
+            };
+            const auto derivative=[](long double r) {
+                const auto t=std::exp(-(r-7)/.65L);
+                return 100*t/(.65L*(1+t)*(1+t))-2*82*1.43996448L/(r*r);
+            };
+            const auto maximum=bisect_reference(derivative,9,10);
+            near(static_cast<double>(maximum),9.645957048708102,1e-11,"independent Woods-Saxon maximum location");
+            near(static_cast<double>(reference_potential(maximum)),22.80428784202867,1e-11,"independent Woods-Saxon maximum height");
+            const auto excess=[&](long double r){return reference_potential(r)-peak_request.q_mev;};
+            check(excess(9.64L)<0 && excess(9.66L)<0 && excess(maximum)>0,"near-peak forbidden interval is narrower than scan spacing");
+            const auto inner=bisect_reference(excess,9.64L,maximum);
+            const auto outer=bisect_reference(excess,maximum,9.66L);
+            // Independent fixed midpoint quadrature in r, without the solver's
+            // root finder or adaptive sine-coordinate Simpson quadrature.
+            constexpr int panels=65536;
+            long double area=0;
+            const auto width=(outer-inner)/panels;
+            for (int i=0;i<panels;++i) area+=std::sqrt(excess(inner+(i+.5L)*width));
+            const auto action=area*width*std::sqrt(2.L*p.reduced_mass_mev)/197.3269804L;
+            const auto narrow=calculate_spherical_wkb(peak_request);
+            check(narrow.status=="ok" && narrow.action && narrow.log10_half_life_s,"near-peak Woods-Saxon barrier is resolved");
+            near(*narrow.inner_turning_fm,static_cast<double>(inner),1e-8,"near-peak inner root matches independent reference");
+            near(*narrow.outer_turning_fm,static_cast<double>(outer),1e-8,"near-peak outer root matches independent reference");
+            near(*narrow.action,static_cast<double>(action),1e-10,"near-peak action matches independent quadrature");
+        }
+        {
+            // The shared radial solver must refine the supplied callback, not
+            // substitute spherical extrema for a deformed/custom potential.
+            const double center=9.647, half_width=.002;
+            const auto narrow=calculate_radial_wkb(request,[&](double r){return request.q_mev+half_width*half_width-(r-center)*(r-center);},7);
+            check(narrow.status=="ok" && narrow.action,"callback narrow maximum is resolved");
+            near(*narrow.inner_turning_fm,center-half_width,1e-8,"callback narrow-barrier inner root");
+            near(*narrow.outer_turning_fm,center+half_width,1e-8,"callback narrow-barrier outer root");
+            near(*narrow.action,std::sqrt(2*p.reduced_mass_mev)/197.3269804*3.14159265358979323846*half_width*half_width/2,1e-10,"callback parabolic-barrier exact action");
+            const double pocket_center=4.011, pocket_half_width=.001;
+            const auto pocket=calculate_radial_wkb(request,[&](double r){return request.q_mev+((r-pocket_center)*(r-pocket_center)-pocket_half_width*pocket_half_width)*(10-r);},7);
+            check(pocket.status=="ok" && pocket.action,"callback narrow minimum retains the allowed pocket");
+            near(*pocket.inner_turning_fm,pocket_center+pocket_half_width,1e-8,"callback narrow-pocket outgoing root");
+            near(*pocket.outer_turning_fm,10,1e-8,"callback narrow-pocket outer root");
+            auto tiny_q=request; tiny_q.q_mev=1e-30;
+            const auto exhausted=calculate_spherical_wkb(tiny_q);
+            check(exhausted.status=="numerical_error" && !exhausted.action && !exhausted.log10_half_life_s,
+                  "positive-Q outer-search exhaustion is numerical failure, not a closed barrier");
+        }
         near(coulomb_potential(p,7-1e-8),coulomb_potential(p,7+1e-8),1e-6,"charge sphere continuity");
         p.l=1; p.centrifugal=CentrifugalConvention::physical;
         const double physical=centrifugal_potential(p,7);
