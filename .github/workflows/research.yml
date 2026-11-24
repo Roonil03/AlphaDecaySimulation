@@ -62,6 +62,7 @@ jobs:
           test -s fit.png
           python research/tests/native_campaign.py --core "$ALPHADECAY_CORE" --scheduler "$PWD/scheduler"
           python research/package.py --scheduler scheduler --output research-linux.tar.gz
+          python research/tests/bundle_smoke.py --archive research-linux.tar.gz --core "$ALPHADECAY_CORE"
       - name: Native pipeline Windows
         if: runner.os == 'Windows'
         shell: pwsh
@@ -78,6 +79,8 @@ jobs:
           python research/tests/native_campaign.py --core $env:ALPHADECAY_CORE --scheduler ./scheduler.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python research/package.py --scheduler scheduler.exe --output research-windows.zip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python research/tests/bundle_smoke.py --archive research-windows.zip --core $env:ALPHADECAY_CORE
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
