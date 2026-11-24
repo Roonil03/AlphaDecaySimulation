@@ -35,6 +35,19 @@ class DemoTest(unittest.TestCase):
                                '--population', '100'], capture_output=True, text=True, check=True)
         self.assertEqual(len(json.loads(proc.stdout)['energy_sweep']), 3)
 
+    def test_extreme_survival_scale_is_explicit(self):
+        for predicted, sampled in ((400, 299), (-400, -300), (1, 1)):
+            with self.subTest(predicted=predicted), patch('observatory.__main__.calculate',
+                    return_value={'log10_half_life_s': predicted}):
+                result = run('native', population=10, model='baseline')
+            scale = result['survival_time_scale']
+            self.assertEqual(scale['predicted_log10_half_life_s'], predicted)
+            self.assertEqual(scale['sampled_log10_half_life_s'], sampled)
+            self.assertEqual(scale['saturated'], predicted != sampled)
+            self.assertEqual(result['times_s'][2], 10 ** sampled)
+            self.assertEqual(bool(scale['note']), predicted != sampled)
+            self.assertIn('central catalog Q', result['energy_sweep_note'])
+
     def test_cli_validation(self):
         for flag, value in (('--population', '0'), ('--population', '100001'),
                             ('--seed', str(-(2**63)-1)), ('--seed', str(2**63))):
