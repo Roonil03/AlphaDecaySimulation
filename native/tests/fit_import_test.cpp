@@ -11,12 +11,13 @@ static void require(bool condition, const char *message) {
 }
 
 static json fixture() {
-  return {{"schema_version", 1}, {"dataset_version", "test-v1"},
-          {"preformation", .02}, {"assault_hz", 1e21},
-          {"calibration_ids", {"fit"}},
-          {"cases", {{{"id", "fit"}, {"split", "calibration"},
-                      {"request", {{"parent_z", 84}, {"parent_a", 212},
-                                   {"q_mev", 8.9542}, {"l", 0}, {"radius_fm", 9}}}}}};
+  return json::parse(R"({
+    "schema_version": 1, "dataset_version": "test-v1",
+    "preformation": 0.02, "assault_hz": 1e21, "calibration_ids": ["fit"],
+    "cases": [{"id": "fit", "split": "calibration", "request": {
+      "parent_z": 84, "parent_a": 212, "q_mev": 8.9542, "l": 0, "radius_fm": 9
+    }}]
+  })");
 }
 
 static void rejected_atomically(const json &candidate) {
