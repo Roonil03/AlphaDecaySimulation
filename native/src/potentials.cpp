@@ -18,7 +18,7 @@ double coulomb_potential(const SphericalPotential& p, double r) {
 }
 double centrifugal_potential(const SphericalPotential& p, double r) {
     const double factor = p.centrifugal == CentrifugalConvention::physical
-        ? static_cast<double>(p.l) * (p.l + 1) : (p.l + 0.5) * (p.l + 0.5);
+        ? static_cast<double>(p.l) * (static_cast<double>(p.l) + 1) : (p.l + 0.5) * (p.l + 0.5);
     if (factor == 0) return 0;
     if (r == 0) return std::numeric_limits<double>::infinity();
     return hbar_c * hbar_c * factor / (2 * p.reduced_mass_mev * r * r);

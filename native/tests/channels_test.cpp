@@ -4,6 +4,7 @@
 #include <source_location>
 #include <cmath>
 #include <iostream>
+#include <limits>
 using namespace alpha;
 void check(bool value, const std::source_location& where = std::source_location::current()) {
  if (!value) throw std::runtime_error("channel/deformation check failed at line " + std::to_string(where.line()));
@@ -38,5 +39,15 @@ int main(){
  const auto narrow=calculate_deformed_wkb(req,{.2,0});
  check(wide.status=="ok" && narrow.status=="ok");
  check(std::abs(*wide.log10_penetrability-*narrow.log10_penetrability)<1e-7);
+ // Oversized user geometry must be refused before a floating-to-int table
+ // conversion or allocation, even though every individual input is finite.
+ req.potential.charge_radius_fm=1e300;
+ const auto oversized=calculate_deformed_wkb(req,{.2,0});
+ check(!oversized.log10_penetrability && !oversized.log10_half_life_s);
+ check(oversized.message=="Charge scale exceeds table limit");
+ req.potential.charge_radius_fm=9;
+ req.potential.l=std::numeric_limits<int>::max();
+ const double centrifugal=centrifugal_potential(req.potential,9);
+ check(std::isfinite(centrifugal) && centrifugal>0);
  std::cout<<"channel and deformation tests passed\n";
 }

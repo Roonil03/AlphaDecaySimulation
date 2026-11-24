@@ -45,8 +45,10 @@ DeformedWkbResult calculate_deformed_wkb(const SphericalWkbRequest& req, Deforma
   using Row=std::array<double,17>;
   struct Table { double dr; int order; std::vector<Row> rows; };
   auto build=[&](int order,int nq,double dr) {
-    const int count=static_cast<int>(std::ceil(boundary/dr));
-    if(count>40000) throw std::invalid_argument("Charge scale exceeds table limit");
+    const double intervals=std::ceil(boundary/dr);
+    if(!std::isfinite(intervals) || intervals<1 || intervals>40000)
+     throw std::invalid_argument("Charge scale exceeds table limit");
+    const int count=static_cast<int>(intervals);
     std::vector<double> source(nq); std::vector<Row> polys(nq);
     for(int i=0;i<nq;i++){double u=(i+0.5)/nq;source[i]=R*raw(d,u)/norm;for(int k=0;k<=order/2;k++) polys[i][k]=legendre(2*k,u);}
     Table t{dr,order,std::vector<Row>(count+1)};
