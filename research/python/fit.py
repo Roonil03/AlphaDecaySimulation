@@ -38,6 +38,8 @@ def native_prediction(core, request):
     proc = subprocess.run([core, "--run"], input=json.dumps(request), text=True,
                           capture_output=True, check=True, timeout=30)
     result = json.loads(proc.stdout)
+    if not isinstance(result, dict) or type(result.get("schema_version")) is not int or result["schema_version"] != 1:
+        raise ValueError("unsupported native result version")
     value = result["log10_half_life_s"]
     if not math.isfinite(value):
         raise ValueError("native prediction must be finite")
