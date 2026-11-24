@@ -9,6 +9,14 @@ from unittest.mock import patch
 from observatory.__main__ import Q_MEV, calculate, main, run, survival
 
 class DemoTest(unittest.TestCase):
+    def test_native_result_requires_integer_version_one_object(self):
+        for response in ({}, {'schema_version': True}, {'schema_version': 1.0},
+                         {'schema_version': 2}, [], None):
+            with self.subTest(response=response), patch('observatory.__main__.subprocess.run',
+                    return_value=subprocess.CompletedProcess([], 0, stdout=json.dumps(response))):
+                with self.assertRaisesRegex(ValueError, 'unsupported native result version'):
+                    calculate('native', {})
+
     def test_sweep_uses_selected_model_and_seeded_survival(self):
         def fake(core, payload):
             return {'log10_half_life_s': -payload['q_mev'],
@@ -34,6 +42,19 @@ class DemoTest(unittest.TestCase):
         proc = subprocess.run([sys.executable, '-m', 'observatory', '--core', core,
                                '--population', '100'], capture_output=True, text=True, check=True)
         self.assertEqual(len(json.loads(proc.stdout)['energy_sweep']), 3)
+
+    def test_extreme_survival_scale_is_explicit(self):
+        for predicted, sampled in ((400, 299), (-400, -300), (1, 1)):
+            with self.subTest(predicted=predicted), patch('observatory.__main__.calculate',
+                    return_value={'log10_half_life_s': predicted}):
+                result = run('native', population=10, model='baseline')
+            scale = result['survival_time_scale']
+            self.assertEqual(scale['predicted_log10_half_life_s'], predicted)
+            self.assertEqual(scale['sampled_log10_half_life_s'], sampled)
+            self.assertEqual(scale['saturated'], predicted != sampled)
+            self.assertEqual(result['times_s'][2], 10 ** sampled)
+            self.assertEqual(bool(scale['note']), predicted != sampled)
+            self.assertIn('central catalog Q', result['energy_sweep_note'])
 
     def test_cli_validation(self):
         for flag, value in (('--population', '0'), ('--population', '100001'),

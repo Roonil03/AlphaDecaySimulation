@@ -20,6 +20,72 @@ def launch_args(directory, manifest, scheduler, core):
             str(scheduler), str(core), '2']
 
 
+def windows_active_child_lifecycle(base, scheduler):
+    """Stop only our benign fixture tree and verify both children exited."""
+    import ctypes
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.OpenProcess.restype = ctypes.c_void_p
+    kernel.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+    kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    kernel.TerminateProcess.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+    core = base / 'waiting-core.exe'
+    subprocess.run(['go', 'build', '-o', str(core), str(ROOT / 'research' / 'tests' / 'fixtures' / 'waiting_core.go')],
+                   check=True, capture_output=True, text=True, timeout=120)
+    directory = base / 'active-campaign'
+    started, release, finished = (base / name for name in ('started.json', 'release', 'finished'))
+    manifest = base / 'active.json'
+    manifest.write_text(json.dumps({'cases': [{'id': 'waiting', 'request': {
+        'started': str(started), 'release': str(release), 'finished': str(finished)}}]}))
+    command = launch_args(directory, manifest, scheduler, core)
+    process = subprocess.Popen(command, cwd=ELIXIR, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    handles = []
+    try:
+        deadline = time.monotonic() + 90
+        while not started.exists() and process.poll() is None and time.monotonic() < deadline:
+            time.sleep(.1)
+        assert started.exists(), 'active native fixture did not start'
+        # The file can become visible before its small write completes.
+        while True:
+            try:
+                pids = json.loads(started.read_text())
+                break
+            except json.JSONDecodeError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(.01)
+        for role in ('scheduler', 'core'):
+            # Keep handles to these exact process instances even if IDs are reused.
+            handle = kernel.OpenProcess(0x00100001, False, pids[role])
+            assert handle, f'could not open active {role} fixture process'
+            handles.append((role, handle))
+            assert kernel.WaitForSingleObject(handle, 0) == 0x102, f'{role} was not active'
+        assert not finished.exists(), 'waiting fixture unexpectedly finished'
+        process.kill()
+        process.communicate(timeout=30)
+        for role, handle in handles:
+            assert kernel.WaitForSingleObject(handle, 10000) == 0, f'{role} survived launcher termination'
+        assert not finished.exists(), 'terminated fixture completed its workload'
+        assert not list((directory / 'results').glob('*.json')), 'terminated case was committed'
+        release.write_text('resume fixture')
+        replay = subprocess.run(command, cwd=ELIXIR, capture_output=True, text=True, timeout=120)
+        assert replay.returncode == 0, replay.stdout + replay.stderr
+        result = json.loads((directory / 'results' / 'waiting.json').read_text())
+        assert result['response']['fixture'] is True
+        assert json.loads((directory / 'attempts' / 'waiting.json').read_text())['count'] == 2
+        events = [json.loads(line) for line in (directory / 'events.jsonl').read_text().splitlines()]
+        assert len([event for event in events if event['event'] == 'succeeded']) == 1
+    finally:
+        if process.poll() is None:
+            process.kill()
+        # Cleanup is restricted to the two processes opened from our fixture IDs.
+        for _, handle in handles:
+            if kernel.WaitForSingleObject(handle, 0) == 0x102:
+                kernel.TerminateProcess(handle, 1)
+            kernel.CloseHandle(handle)
+        process.communicate(timeout=30)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--core', type=lambda p: Path(p).resolve(), required=True)
@@ -91,6 +157,9 @@ def main():
         assert json.loads((rejected / 'attempts' / 'bad.json').read_text())['count'] == 1
         assert (rejected / 'attempts' / 'bad.rejected').exists()
         print('native campaign, lock, pause, replay and domain rejection passed')
+        if os.name == 'nt':
+            windows_active_child_lifecycle(base, args.scheduler)
+            print('active scheduler/core termination and single-result restart passed')
 
 if __name__ == '__main__': main()
 

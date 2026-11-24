@@ -10,17 +10,24 @@ ASSAULT_HZ = 1e21  # fixed normalization; only preformation is fitted
 
 def load_data(path):
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    if data.get("schema_version") != 1 or not isinstance(data.get("dataset_version"), str) or not data["dataset_version"].strip():
+    if (not isinstance(data, dict) or type(data.get("schema_version")) is not int or
+            data["schema_version"] != 1 or not isinstance(data.get("dataset_version"), str) or
+            not data["dataset_version"].strip()):
         raise ValueError("versioned dataset schema required")
-    rows = data["cases"]
-    ids = [row["id"] for row in rows]
-    if len(ids) != len(set(ids)) or not all(ids):
+    rows = data.get("cases")
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+        raise ValueError("dataset cases must be an array of objects")
+    ids = [row.get("id") for row in rows]
+    if not all(isinstance(case_id, str) and case_id.strip() for case_id in ids) or len(ids) != len(set(ids)):
         raise ValueError("case IDs must be unique and nonempty")
     for row in rows:
-        if row["split"] not in ("calibration", "validation"):
+        if row.get("split") not in ("calibration", "validation"):
             raise ValueError("split must be calibration or validation")
-        if not math.isfinite(row["log10_half_life_s"]):
+        value = row.get("log10_half_life_s")
+        if type(value) not in (int, float) or not math.isfinite(value):
             raise ValueError("observed log half-life must be finite")
+        if not isinstance(row.get("request"), dict):
+            raise ValueError("case request must be an object")
     if not any(row["split"] == "calibration" for row in rows):
         raise ValueError("at least one calibration case required")
     return data
@@ -38,8 +45,10 @@ def native_prediction(core, request):
     proc = subprocess.run([core, "--run"], input=json.dumps(request), text=True,
                           capture_output=True, check=True, timeout=30)
     result = json.loads(proc.stdout)
-    value = result["log10_half_life_s"]
-    if not math.isfinite(value):
+    if not isinstance(result, dict) or type(result.get("schema_version")) is not int or result["schema_version"] != 1:
+        raise ValueError("unsupported native result version")
+    value = result.get("log10_half_life_s")
+    if type(value) not in (int, float) or not math.isfinite(value):
         raise ValueError("native prediction must be finite")
     return value
 

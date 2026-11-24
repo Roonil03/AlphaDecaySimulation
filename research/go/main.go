@@ -30,6 +30,28 @@ type Result struct {
 	ErrorKind string          `json:"error_kind,omitempty"`
 }
 
+const manifestLimit = 16 << 20
+const streamLimit = 1 << 20
+
+func readCampaign(input io.Reader) (Campaign, error) {
+	var campaign Campaign
+	data, err := io.ReadAll(io.LimitReader(input, manifestLimit+1))
+	if err != nil {
+		return campaign, err
+	}
+	if len(data) > manifestLimit {
+		return campaign, errors.New("campaign manifest exceeds 16 MiB")
+	}
+	// Unmarshal requires one complete JSON value, including the end of input.
+	if err := json.Unmarshal(data, &campaign); err != nil {
+		return campaign, err
+	}
+	if campaign.Cases == nil {
+		return campaign, errors.New("campaign requires a cases array")
+	}
+	return campaign, nil
+}
+
 func run(ctx context.Context, executable string, c Case, timeout time.Duration) Result {
 	r := Result{ID: c.ID}
 	if c.ID == "" || !json.Valid(c.Request) {
@@ -44,6 +66,10 @@ func run(ctx context.Context, executable string, c Case, timeout time.Duration) 
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
 	out := stdout.Bytes()
+	if stdout.exceeded || stderr.exceeded {
+		r.Error = "native output exceeds 1 MiB per stream"
+		return r
+	}
 	if ctx.Err() != nil {
 		r.Error = ctx.Err().Error()
 		return r
@@ -72,13 +98,21 @@ func run(ctx context.Context, executable string, c Case, timeout time.Duration) 
 }
 
 // limitedBuffer prevents a faulty child from exhausting scheduler memory.
-type limitedBuffer struct{ bytes.Buffer }
+type limitedBuffer struct {
+	buffer   bytes.Buffer
+	exceeded bool
+}
+
+func (b *limitedBuffer) Bytes() []byte { return b.buffer.Bytes() }
 
 func (b *limitedBuffer) Write(p []byte) (int, error) {
-	if b.Len()+len(p) > 1<<20 {
-		return 0, errors.New("native output exceeds 1 MiB")
+	remaining := streamLimit - b.buffer.Len()
+	if len(p) > remaining {
+		b.exceeded = true
+		n, _ := b.buffer.Write(p[:remaining])
+		return n, errors.New("native output exceeds 1 MiB per stream")
 	}
-	return b.Buffer.Write(p)
+	return b.buffer.Write(p)
 }
 
 func execute(ctx context.Context, executable string, cases []Case, workers int, timeout time.Duration) ([]Result, error) {
@@ -121,7 +155,6 @@ func main() {
 		fmt.Fprintln(os.Stderr, "-core is required")
 		os.Exit(2)
 	}
-	var c Campaign
 	var input io.Reader = os.Stdin
 	if *inputPath != "" {
 		file, err := os.Open(*inputPath)
@@ -132,8 +165,8 @@ func main() {
 		defer file.Close()
 		input = file
 	}
-	dec := json.NewDecoder(io.LimitReader(input, 16<<20))
-	if err := dec.Decode(&c); err != nil {
+	c, err := readCampaign(input)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}

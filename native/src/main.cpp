@@ -92,6 +92,7 @@ for (const char *key : {"deformation", "parent_spin", "channels", "competing_rat
   }
   if (model != "square_well" && model != "woods_saxon")
     throw std::invalid_argument("unknown potential_model");
+  validate_numerical_analysis_options(j);
   alpha::SphericalPotential v;
   v.kind = model == "square_well" ? alpha::PotentialKind::square_well : alpha::PotentialKind::woods_saxon;
   v.nuclear_depth_mev = j.value("nuclear_depth_mev", 100.0);
@@ -200,8 +201,7 @@ static void self_test() {
 int main(int argc, char **argv) {
   try {
     if (argc == 2 && std::string(argv[1]) == "--run") {
-      json j;
-      std::cin >> j;
+      const auto j = json::parse(std::cin);
       std::cout << run_request(j).dump() << '\n';
       return 0;
     }

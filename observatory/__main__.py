@@ -25,7 +25,7 @@ def calculate(core, payload):
     except (OSError, subprocess.SubprocessError) as error:
         raise RuntimeError(f'native calculation failed: {error}') from error
     result = json.loads(completed.stdout)
-    if result.get('schema_version') != 1:
+    if not isinstance(result, dict) or type(result.get('schema_version')) is not int or result['schema_version'] != 1:
         raise ValueError('unsupported native result version')
     return result
 
@@ -74,13 +74,23 @@ def run(base, population=10000, seed=42, isotope=None, custom=None, model='resea
     selected = next((key for key in ('shell_log10_half_life_s', 'research_log10_half_life_s', 'log10_half_life_s') if key in central), 'log10_half_life_s') if model == 'research' else 'log10_half_life_s'
     log_t = central[selected]
     # Extreme estimates saturate the display scale for plotting and sampling.
-    half_life = 10 ** max(-300, min(299, log_t))
+    sampled_log_t = max(-300, min(299, log_t))
+    half_life = 10 ** sampled_log_t
     times = [half_life * x for x in (0, .25, 1, 2, 4)]
     sample = survival(population, seed, half_life, times)
     return {'benchmark': f"{item['symbol']}-{item['a']} ground-state alpha decay" if item else 'custom alpha decay',
             'reference': item, 'measured_half_life_s': measured,
             'research_scope_note': 'Qi alpha-only fit used even-even nuclei with Z=78..108; results outside that range are extrapolations.' if not 78 <= inputs['parent_z'] <= 108 else None,
             'inputs': inputs, 'selected_model': selected, 'population': population, 'seed': seed,
+            'survival_time_scale': {'predicted_log10_half_life_s': log_t,
+                                    'sampled_log10_half_life_s': sampled_log_t,
+                                    'saturated': sampled_log_t != log_t,
+                                    'note': ('Sampling and times_s use a clipped display half-life; '
+                                             'they do not represent the predicted physical time scale.')
+                                            if sampled_log_t != log_t else None},
+            'energy_sweep_note': ('The measured reference is for the central catalog Q. '
+                                  'Shifted-Q comparisons are sensitivity scenarios, not additional measured channels.')
+                                 if measured is not None else None,
             'energy_sweep': points, 'times_s': times, 'survival': sample}
 
 

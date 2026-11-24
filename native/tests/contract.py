@@ -23,6 +23,94 @@ class Contract(unittest.TestCase):
         self.assertTrue(all(math.isfinite(v) for v in result.values() if isinstance(v, (int, float))))
         self.assertEqual(result['model_parameters']['q_mev'], BASE['q_mev'])
 
+    def test_exactly_one_request_and_clean_error_streams(self):
+        for suffix in (' {}', '\nnull', ' trailing text'):
+            proc = subprocess.run([EXE, '--run'], input=json.dumps(BASE) + suffix,
+                                  text=True, capture_output=True)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertEqual(proc.stdout, '')
+            self.assertIn('error', json.loads(proc.stderr))
+        proc = subprocess.run([EXE, '--run'], input=json.dumps(BASE) + ' \n\t',
+                              text=True, capture_output=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stderr, '')
+        self.assertEqual(json.loads(proc.stdout)['schema_version'], 1)
+
+    def test_json_whitespace_bytes(self):
+        payload = json.dumps(BASE).encode('utf-8')
+        # C++ stream whitespace includes VT/FF; JSON permits only SP/HT/LF/CR.
+        for suffix in (b'\x0b', b'\x0c', b' \t\r\n\x0b', b' \t\r\n\x0c'):
+            proc = subprocess.run([EXE, '--run'], input=payload + suffix,
+                                  capture_output=True)
+            self.assertNotEqual(proc.returncode, 0, suffix)
+            self.assertEqual(proc.stdout, b'')
+            self.assertIn('error', json.loads(proc.stderr))
+        proc = subprocess.run([EXE, '--run'], input=payload + b' \t\r\n',
+                              capture_output=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stderr, b'')
+        self.assertEqual(json.loads(proc.stdout)['schema_version'], 1)
+
+    def test_malformed_json_and_nested_types(self):
+        for raw in ('', 'null', '[]', '{"schema_version":',
+                    json.dumps(BASE).replace('8.9542', 'NaN'),
+                    json.dumps(BASE).replace('8.9542', '1e999')):
+            proc = subprocess.run([EXE, '--run'], input=raw, text=True, capture_output=True)
+            self.assertNotEqual(proc.returncode, 0, raw)
+            self.assertEqual(proc.stdout, '')
+            self.assertIn('error', json.loads(proc.stderr))
+        spherical = BASE | {'potential_model': 'woods_saxon'}
+        for change in ({'deformation': []}, {'channels': {}}, {'parent_spin': []},
+                       {'uncertainty': []}, {'uncertainty': {'covariance': [1, 2, 3, 4]}},
+                       {'uncertainty': {'standard_deviations': [None, 0, 0, 0]}}):
+            proc = self.run_request(spherical | change)
+            self.assertNotEqual(proc.returncode, 0, change)
+            self.assertEqual(proc.stdout, '')
+            self.assertIn('error', json.loads(proc.stderr))
+
+    def test_external_real_boundaries_and_exact_coulomb_action(self):
+        for field, low, high in (('q_mev', .01, 100.), ('radius_fm', .1, 100.),
+                                  ('preformation', 0., 1.), ('assault_hz', 1e-300, 1e30),
+                                  ('parent_binding_mev', 0., 10000.)):
+            for value in (math.nextafter(low, -math.inf), math.nextafter(high, math.inf)):
+                proc = self.run_request(BASE | {field: value})
+                self.assertNotEqual(proc.returncode, 0, (field, value))
+                self.assertEqual(proc.stdout, '')
+            for value in (high,) if low == 0 else (low, high):
+                proc = self.run_request(BASE | {field: value})
+                self.assertEqual(proc.returncode, 0, (field, value, proc.stderr))
+        # Independent closed-form l=0 action; fixture snapshots alone would not
+        # detect a shared error in the quadrature and generated references.
+        for q, radius in ((.01, .1), (5., 9.), (25., 9.), (100., 100.)):
+            request = BASE | {'q_mev': q, 'radius_fm': radius}
+            proc = self.run_request(request)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            result = json.loads(proc.stdout)
+            mu = 931.49410242 * 4 * (request['parent_a'] - 4) / request['parent_a']
+            outer = 2 * (request['parent_z'] - 2) * 1.43996448 / q
+            x = radius / outer
+            action = (math.sqrt(2 * mu * q) * outer / 197.3269804 *
+                      (math.acos(math.sqrt(x)) - math.sqrt(x * (1 - x)))) if x < 1 else 0.
+            expected_logp = -2 * action / math.log(10)
+            self.assertAlmostEqual(result['outer_turning_fm'], outer, delta=1e-9 * outer)
+            self.assertAlmostEqual(result['log10_penetrability'], expected_logp, delta=1e-5)
+            self.assertAlmostEqual(result['log10_half_life_s'],
+                math.log10(math.log(2)) - math.log10(request['preformation']) -
+                math.log10(request['assault_hz']) - expected_logp, delta=1e-5)
+
+    def test_closed_channels_still_validate_uncertainty_options(self):
+        closed = BASE | {'potential_model': 'woods_saxon',
+                         'channels': [{'l': 0, 'excitation_mev': 20}]}
+        for options in (True, {'bogus': 1}, {'sample_count': 0}, {'sample_count': 1.5},
+                        {'standard_deviations': [-1, 0, 0, 0]},
+                        {'standard_deviations': [1e308, 0, 0, 0]},
+                        {'covariance': [[-1, 0, 0, 0], [0, 0, 0, 0],
+                                        [0, 0, 0, 0], [0, 0, 0, 0]]}):
+            proc = self.run_request(closed | {'uncertainty': options})
+            self.assertNotEqual(proc.returncode, 0, options)
+            self.assertEqual(proc.stdout, '')
+            self.assertIn('error', json.loads(proc.stderr))
+
     def test_gating_and_invalid_inputs(self):
         for change in ({'l': 1}, {'parent_a': 211}, {'research_model': False}):
             proc = self.run_request(BASE | change)

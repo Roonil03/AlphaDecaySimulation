@@ -23,6 +23,9 @@ struct UncertaintyResult {
     std::optional<double> log10_half_life_p16, log10_half_life_p50, log10_half_life_p84;
     bool assumed_independent = false;
 };
+// Validates only the requested sampling distribution and draw count; it does
+// not evaluate the baseline barrier or generate draws.
+std::optional<std::string> validate_uncertainty_request(const UncertaintyRequest&);
 UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest&, const std::function<bool()>& cancelled = {});
 }
 
