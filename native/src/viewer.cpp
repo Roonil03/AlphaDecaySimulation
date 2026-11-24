@@ -2,6 +2,7 @@
 #include "alpha/core.hpp"
 #include "alpha/deformation.hpp"
 #include "channel_json.hpp"
+#include "fit_import.hpp"
 #include "alpha/spherical_wkb.hpp"
 
 #include "alpha/uncertainty.hpp"
@@ -563,29 +564,9 @@ int viewer(int argc, char **argv) {
             std::ifstream file(fit_path);
             if (!file) throw std::runtime_error("Cannot open fit JSON");
             json candidate = json::parse(file);
-            if (candidate.at("schema_version") != 1 || !candidate.at("cases").is_array() || !candidate.at("calibration_ids").is_array())
-              throw std::runtime_error("Unsupported fit schema");
-            if (!candidate.at("dataset_version").is_string() || candidate.at("dataset_version").get<std::string>().empty())
-              throw std::runtime_error("Invalid dataset version");
-            const double pre = candidate.at("preformation").get<double>();
-            const double hz = candidate.at("assault_hz").get<double>();
-            if (!std::isfinite(pre) || pre <= 0 || pre > 1 || !std::isfinite(hz) || hz <= 0)
-              throw std::runtime_error("Invalid fitted rate parameters");
-            std::set<std::string> ids, calibration;
-            for (const auto &id : candidate.at("calibration_ids"))
-              if (!calibration.insert(id.get<std::string>()).second) throw std::runtime_error("Duplicate calibration ID");
-            for (const auto &row : candidate.at("cases")) {
-              const auto id = row.at("id").get<std::string>();
-              const auto split = row.at("split").get<std::string>();
-              if (id.empty() || !ids.insert(id).second || (split != "calibration" && split != "validation") || (calibration.contains(id) != (split == "calibration")))
-                throw std::runtime_error("Invalid fit case membership");
-              if (!row.at("request").is_object()) throw std::runtime_error("Invalid fit request");
-            }
-            if (calibration.empty() || !std::all_of(calibration.begin(), calibration.end(), [&](const auto &id) { return ids.contains(id); }))
-              throw std::runtime_error("Invalid calibration IDs");
-            fit_result = std::move(candidate);
+            load_fit_import(std::move(candidate), fit_result);
             error.clear();
-          } catch (const std::exception &e) { fit_result = json{}; error = e.what(); }
+          } catch (const std::exception &e) { error = e.what(); }
         }
         if (fit_result.is_object()) {
           ImGui::Text("Dataset: %s", fit_result.value("dataset_version", std::string("unknown")).c_str());
@@ -595,23 +576,11 @@ int viewer(int argc, char **argv) {
             const auto label = row.at("id").get<std::string>() + " (" + row.at("split").get<std::string>() + ")";
             if (ImGui::Selectable(label.c_str())) {
               try {
-                const auto &r = row.at("request");
-                const std::set<std::string> allowed = {"schema_version", "parent_z", "parent_a", "q_mev", "l", "radius_fm", "preformation", "assault_hz", "research_model", "parent_binding_mev", "potential_model", "centrifugal_convention", "nuclear_depth_mev", "nuclear_radius_fm", "diffuseness_fm", "charge_radius_fm"};
-                for (auto it = r.begin(); it != r.end(); ++it)
-                  if (!allowed.contains(it.key())) throw std::runtime_error("Unsupported fit request field: " + it.key());
-                alpha::Request imported = request;
-                imported.parent_z = r.at("parent_z").get<int>(); imported.parent_a = r.at("parent_a").get<int>();
-                imported.q_mev = r.at("q_mev").get<double>(); imported.l = r.at("l").get<int>(); imported.radius_fm = r.at("radius_fm").get<double>();
-                imported.preformation = fit_result.at("preformation").get<double>(); imported.assault_hz = fit_result.at("assault_hz").get<double>();
-                imported.research_model = r.value("research_model", false); imported.parent_binding_mev.reset();
-                if (r.contains("parent_binding_mev") && !r["parent_binding_mev"].is_null()) imported.parent_binding_mev = r["parent_binding_mev"].get<double>();
-                const auto kind = r.value("potential_model", std::string("external"));
-                if (kind != "external" && kind != "square_well" && kind != "woods_saxon") throw std::runtime_error("Unsupported fit potential");
-                const auto conv = r.value("centrifugal_convention", std::string("physical"));
-                if (conv != "physical" && conv != "langer_wkb") throw std::runtime_error("Unsupported centrifugal convention");
-                double d = r.value("nuclear_depth_mev", 100.0), nr = r.value("nuclear_radius_fm", imported.radius_fm), df = r.value("diffuseness_fm", .65), cr = r.value("charge_radius_fm", imported.radius_fm);
-                request = imported; potential_model = kind == "external" ? 0 : kind == "square_well" ? 1 : 2;
-                convention = conv == "physical" ? 0 : 1; depth = d; nuclear_radius = nr; diffuseness = df; charge_radius = cr;
+                const auto imported = parse_fit_request(row.at("request"), fit_result);
+                request = imported.request; potential_model = imported.potential_model;
+                convention = imported.convention; depth = imported.depth;
+                nuclear_radius = imported.nuclear_radius; diffuseness = imported.diffuseness;
+                charge_radius = imported.charge_radius;
                 advanced = false; changed = true; error.clear();
               } catch (const std::exception &e) { error = e.what(); }
             }
@@ -759,9 +728,16 @@ int viewer(int argc, char **argv) {
         elapsed = 0;
       }
       bool available = selected_log().has_value();
-      if (!available)
-        ImGui::TextWrapped("Selected model unavailable. Calculate valid "
-                           "even-even l=0 inputs for Qi/Ren.");
+      if (!available) {
+        if (!valid)
+          ImGui::TextWrapped("No current result. Calculate valid inputs to update the viewer.");
+        else if (model == 0 && advanced && potential_model && channel_job.valid())
+          ImGui::TextWrapped("Waiting for the selected channel calculation.");
+        else if (model != 0)
+          ImGui::TextWrapped("Selected comparison unavailable. Qi/Ren require supported even-even l=0 inputs; Ren also requires parent binding energy.");
+        else
+          ImGui::TextWrapped("Selected WKB result has no finite half-life. See the calculation status.");
+      }
       if (available) {
         if (ImGui::Button(playing ? "Pause" : "Play"))
           playing = !playing;
@@ -814,8 +790,9 @@ int viewer(int argc, char **argv) {
             const double r = start + (end - start) * i / (count - 1);
             values[i] = static_cast<float>(alpha::spherical_potential(v, r));
           }
-          ImGui::Text("Total potential (MeV), radius %.3g to %.3g fm; Q = %.5g MeV", start, end, request.q_mev);
-          ImGui::PlotLines("##potential", values.data(), count, 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(0, 130));
+          ImGui::TextWrapped("Total potential (MeV), radius %.3g to %.3g fm; Q = %.5g MeV", start, end, request.q_mev);
+          ImGui::PlotLines("##potential", values.data(), count, 0, nullptr, FLT_MAX, FLT_MAX,
+                           ImVec2(ImGui::GetContentRegionAvail().x, 130));
           if (advanced) ImGui::TextWrapped("This is the spherical reference, not the deformed orientation-dependent barrier.");
           ImGui::TreePop();
         }
