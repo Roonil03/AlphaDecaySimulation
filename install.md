@@ -33,7 +33,7 @@ ctest --test-dir build --output-on-failure
 ./build/AlphaDecay
 ```
 
-CMake fetches the pinned GLFW, Dear ImGui and nlohmann/json revisions on first configuration. The default build includes the Rust Numerov solver. `-DALPHA_ENABLE_NUMEROV=OFF` disables it. The viewer needs a graphical session. `--run` and `--self-test` need no display. An Xvfb display with Mesa can run `--render-preview` in a headless environment.
+CMake fetches the pinned GLFW, Dear ImGui and nlohmann/json revisions on first configuration. The default build includes the Rust Numerov solver. `-DALPHA_ENABLE_NUMEROV=OFF` disables it. On either platform, Python 3 is optional for building, but must be available at CMake configure time to register the `cli-contract` and `viewer-contract` CTest cases, plus `numerical-contract` when Numerov is enabled. If Python was unavailable, install it and rerun configuration before running the full test suite. The viewer needs a graphical session. `--run` and `--self-test` need no display. An Xvfb display with Mesa can run `--render-preview` in a headless environment.
 
 ## Optional research and Python compatibility tools
 

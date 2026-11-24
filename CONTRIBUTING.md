@@ -12,7 +12,7 @@ cmake --build build --config Release --parallel 2
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-On Windows with a multi-configuration generator, `-C Release` selects the built configuration for tests. CMake fetches pinned dependencies on first configuration, and the default build needs Rust/Cargo for Numerov. The [Tests workflow](.github/workflows/ci.yml) runs these commands on Windows and Ubuntu and checks packaged executables. Run checks relevant to your change and report their results, including any you could not run. See [research tools](research/README.md) for optional component-specific checks.
+On Windows with a multi-configuration generator, `-C Release` selects the built configuration for tests. CMake fetches pinned dependencies on first configuration, and the default build needs Rust/Cargo for Numerov. Python 3 is optional for building, but must be available when CMake configures the project to register the `cli-contract` and `viewer-contract` CTest cases, plus `numerical-contract` when Numerov is enabled. If Python was unavailable, install it and rerun configuration before running the full test suite. The [Tests workflow](.github/workflows/ci.yml) runs these commands on Windows and Ubuntu and checks packaged executables. Run checks relevant to your change and report their results, including any you could not run. See [research tools](research/README.md) for optional component-specific checks.
 
 ## Scientific changes
 
