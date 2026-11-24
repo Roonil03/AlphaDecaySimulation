@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -17,6 +19,13 @@ func TestMain(m *testing.M) {
 		if req["large"] == true {
 			os.Stdout.Write(make([]byte, 2<<20))
 			os.Exit(0)
+		}
+		if size, ok := req["stdout_bytes"].(float64); ok {
+			io.WriteString(os.Stdout, "{}"+strings.Repeat(" ", int(size)-2))
+			os.Exit(0)
+		}
+		if size, ok := req["stderr_bytes"].(float64); ok {
+			io.WriteString(os.Stderr, strings.Repeat(" ", int(size)))
 		}
 		if req["sleep"] == true {
 			time.Sleep(5 * time.Second)
@@ -33,6 +42,53 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
+}
+
+func TestReadCampaign(t *testing.T) {
+	for _, input := range []string{`{"cases":[]}`, ` {"cases":[{"id":"a","request":{}}]} `} {
+		if _, err := readCampaign(strings.NewReader(input)); err != nil {
+			t.Fatalf("valid manifest rejected: %v", err)
+		}
+	}
+	for _, input := range []string{`{}`, `null`, `{"cases":null}`, `{"cases":{}}`, `{"cases":[]} {}`, `{"cases":[]} garbage`} {
+		if _, err := readCampaign(strings.NewReader(input)); err == nil {
+			t.Fatalf("invalid manifest accepted: %s", input)
+		}
+	}
+	valid := `{"cases":[]}`
+	if _, err := readCampaign(strings.NewReader(valid + strings.Repeat(" ", manifestLimit-len(valid)))); err != nil {
+		t.Fatalf("manifest at bound rejected: %v", err)
+	}
+	for _, suffix := range []string{" ", "{}"} {
+		if _, err := readCampaign(strings.NewReader(valid + strings.Repeat(" ", manifestLimit-len(valid)) + suffix)); err == nil {
+			t.Fatal("oversized manifest accepted")
+		}
+	}
+}
+
+func TestLimitedBufferCopy(t *testing.T) {
+	// A bytes.Buffer ReaderFrom method must not bypass the bounded Write path.
+	var output limitedBuffer
+	n, err := io.Copy(&output, strings.NewReader(strings.Repeat("x", streamLimit+1)))
+	if err == nil || n != streamLimit || len(output.Bytes()) != streamLimit || !output.exceeded {
+		t.Fatalf("output limit bypassed: bytes=%d err=%v", n, err)
+	}
+}
+
+func TestEachOutputStreamLimit(t *testing.T) {
+	exe, _ := os.Executable()
+	for _, stream := range []string{"stdout_bytes", "stderr_bytes"} {
+		for _, size := range []int{streamLimit, streamLimit + 1} {
+			request, _ := json.Marshal(map[string]int{stream: size})
+			got := run(context.Background(), exe, Case{stream, request}, 10*time.Second)
+			if size == streamLimit && got.Error != "" {
+				t.Fatalf("%s at bound rejected: %+v", stream, got)
+			}
+			if size > streamLimit && (got.Error == "" || len(got.Response) != 0) {
+				t.Fatalf("%s above bound accepted: %+v", stream, got)
+			}
+		}
+	}
 }
 func TestExecuteOrderAndFailures(t *testing.T) {
 	exe, _ := os.Executable()
