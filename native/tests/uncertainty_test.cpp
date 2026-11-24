@@ -15,6 +15,12 @@ int main() {
     r.covariance.reset(); r.standard_deviations[0]=20; r.draws=100; auto mixed=alpha::sample_spherical_uncertainty(r);
     check(mixed.closed>0 && mixed.rejected==mixed.closed+mixed.zero_rate+mixed.invalid+mixed.numerical_failure+mixed.unsupported);
     check(mixed.rejection_fraction==static_cast<double>(mixed.rejected)/r.draws);
+    r.standard_deviations={}; r.draws=1000000;
+    check(!alpha::validate_uncertainty_request(r));
+    r.draws=1000001; check(alpha::validate_uncertainty_request(r).has_value());
+    r.draws=1; r.standard_deviations[0]=1e308;
+    check(alpha::validate_uncertainty_request(r).has_value());
+    check(alpha::sample_spherical_uncertainty(r).status=="invalid");
 }
 
 

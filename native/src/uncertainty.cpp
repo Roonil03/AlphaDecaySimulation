@@ -5,7 +5,8 @@
 #include <limits>
 #include <vector>
 namespace alpha {
-UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest& r, const std::function<bool()>& cancelled) {
+namespace {
+UncertaintyResult distribution_factor(const UncertaintyRequest& r, std::array<double,16>& L) {
     UncertaintyResult out;
     if (r.draws == 0 || r.draws > 1000000) { out.status="invalid"; out.message="Draw count must be between 1 and 1000000"; return out; }
     std::array<double,16> cov{};
@@ -30,7 +31,6 @@ UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest& r, cons
         }
     }
     for (int i=0;i<4;++i) for (int j=0;j<4;++j) if (std::abs(correlation[4*i+j]-correlation[4*j+i])>tolerance) {out.status="invalid"; out.message="Covariance must be symmetric"; return out;}
-    std::array<double,16> L{};
     for (int i=0;i<4;++i) for (int j=0;j<=i;++j) {
         double x=correlation[4*i+j]; for(int k=0;k<j;++k) x-=L[4*i+k]*L[4*j+k];
         if (i==j) {if (x < -tolerance) {out.status="invalid"; out.message="Covariance is not positive semidefinite"; return out;} L[4*i+j]=std::sqrt(std::max(0.0,x));}
@@ -38,6 +38,19 @@ UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest& r, cons
         else if (std::abs(x)>tolerance) {out.status="invalid"; out.message="Covariance is not positive semidefinite"; return out;}
     }
     for (int i=0;i<4;++i) for (int j=0;j<=i;++j) L[4*i+j]*=sigma[i];
+    return out;
+}
+}
+std::optional<std::string> validate_uncertainty_request(const UncertaintyRequest& r) {
+    std::array<double,16> L{};
+    const auto validation=distribution_factor(r,L);
+    if (validation.status=="invalid") return validation.message;
+    return std::nullopt;
+}
+UncertaintyResult sample_spherical_uncertainty(const UncertaintyRequest& r, const std::function<bool()>& cancelled) {
+    std::array<double,16> L{};
+    auto out=distribution_factor(r,L);
+    if (out.status=="invalid") return out;
     std::mt19937_64 rng(r.seed); std::normal_distribution<double> normal; std::vector<double> values; values.reserve(r.draws);
     for (std::size_t n=0;n<r.draws;++n) {
         if (cancelled && cancelled()) {out.status="cancelled"; out.message="Cancelled"; return out;}

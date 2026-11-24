@@ -22,3 +22,9 @@ for row in rows:
 
 r=run(dict(base,centrifugal_convention='langer_wkb',numerov={'lead_radius_fm':5,'match_radius_fm':500,'step_fm':.05})); assert r.returncode==0
 n=json.loads(r.stdout)['numerov']; assert n['centrifugal_convention']=='physical' and n['wkb_centrifugal_convention']=='langer_wkb' and 'Different' in n['comparison_note']
+
+# Option validation must not depend on whether any channel can be solved.
+closed=dict(base,channels=[{'l':0,'excitation_mev':20}])
+for options in (True, [], {'bogus':1}, {'step_fm':None}, {'lead_radius_fm':'five'}):
+    r=run(dict(closed,numerov=options))
+    assert r.returncode!=0 and not r.stdout and 'error' in json.loads(r.stderr),options
