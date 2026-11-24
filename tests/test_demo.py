@@ -9,6 +9,14 @@ from unittest.mock import patch
 from observatory.__main__ import Q_MEV, calculate, main, run, survival
 
 class DemoTest(unittest.TestCase):
+    def test_native_result_requires_integer_version_one_object(self):
+        for response in ({}, {'schema_version': True}, {'schema_version': 1.0},
+                         {'schema_version': 2}, [], None):
+            with self.subTest(response=response), patch('observatory.__main__.subprocess.run',
+                    return_value=subprocess.CompletedProcess([], 0, stdout=json.dumps(response))):
+                with self.assertRaisesRegex(ValueError, 'unsupported native result version'):
+                    calculate('native', {})
+
     def test_sweep_uses_selected_model_and_seeded_survival(self):
         def fake(core, payload):
             return {'log10_half_life_s': -payload['q_mev'],

@@ -25,7 +25,7 @@ def calculate(core, payload):
     except (OSError, subprocess.SubprocessError) as error:
         raise RuntimeError(f'native calculation failed: {error}') from error
     result = json.loads(completed.stdout)
-    if result.get('schema_version') != 1:
+    if not isinstance(result, dict) or type(result.get('schema_version')) is not int or result['schema_version'] != 1:
         raise ValueError('unsupported native result version')
     return result
 

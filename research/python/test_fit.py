@@ -33,6 +33,23 @@ class FitTest(unittest.TestCase):
             path.write_text('{"schema_version": 1, "dataset_version": 1, "cases": []}')
             with self.assertRaisesRegex(ValueError, "versioned dataset"):
                 load_data(path)
+    def test_dataset_shape_and_integer_schema_version(self):
+        valid = {'schema_version': 1, 'dataset_version': 'v1', 'cases': [
+            {'id': 'a', 'split': 'calibration', 'log10_half_life_s': 1, 'request': {}}]}
+        invalid = [None, [], {**valid, 'schema_version': True}, {**valid, 'schema_version': 1.0},
+                   {**valid, 'cases': None}, {**valid, 'cases': {}}, {**valid, 'cases': [None]}]
+        for changes in ({'id': 1}, {'id': None}, {'id': ' '}, {'split': None},
+                        {'log10_half_life_s': True}, {'log10_half_life_s': '1'},
+                        {'log10_half_life_s': None}, {'log10_half_life_s': float('inf')},
+                        {'request': []}, {'request': None}):
+            invalid.append({**valid, 'cases': [{**valid['cases'][0], **changes}]})
+        with TemporaryDirectory() as temp:
+            path = Path(temp) / 'data.json'
+            for data in invalid:
+                with self.subTest(data=data):
+                    path.write_text(json.dumps(data), encoding='utf-8')
+                    with self.assertRaises(ValueError):
+                        load_data(path)
     def test_fit_retains_provenance(self):
         data = {"dataset_version": "v1", "source": "citation", "description": "illustrative", "cases": [
             {"id": "a", "split": "calibration", "log10_half_life_s": 1, "request": {}}]}
@@ -44,10 +61,19 @@ class FitTest(unittest.TestCase):
 
     def test_native_result_requires_version_one_object(self):
         for response in ({"log10_half_life_s": 1}, {"schema_version": 2, "log10_half_life_s": 1},
-                         {"schema_version": True, "log10_half_life_s": 1}, [1], None):
+                         {"schema_version": True, "log10_half_life_s": 1},
+                         {"schema_version": 1.0, "log10_half_life_s": 1}, [1], None):
             with self.subTest(response=response), patch('fit.subprocess.run', return_value=
                     subprocess.CompletedProcess([], 0, stdout=json.dumps(response))):
                 with self.assertRaisesRegex(ValueError, 'unsupported native result version'):
+                    native_prediction('native', {})
+
+    def test_native_prediction_requires_finite_numeric_result(self):
+        for value in (True, '1', None, float('inf')):
+            with self.subTest(value=value), patch('fit.subprocess.run', return_value=
+                    subprocess.CompletedProcess([], 0, stdout=json.dumps(
+                        {'schema_version': 1, 'log10_half_life_s': value}))):
+                with self.assertRaisesRegex(ValueError, 'native prediction must be finite'):
                     native_prediction('native', {})
 
     def test_native_normalization_is_sent_and_validated(self):
