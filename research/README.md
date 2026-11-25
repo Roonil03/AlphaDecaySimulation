@@ -4,7 +4,7 @@ These local tools call the native executable's version 1 `--run` JSON interface.
 
 ## Batch scheduler
 
-Build with `cd research/go && go build -o scheduler .`. Run `scheduler -core /absolute/path/to/alpha-core -workers 4 -timeout 30s < ../astro/campaign.json > results.json`. Inputs contain a `cases` array with unique IDs and native requests. Output is an ordered array of IDs with either a native `response` or an `error`. A timeout or interrupt terminates active child processes. Individual failures remain in the result array; inspect them before using the data.
+Build with `cd research/go && go build -o scheduler .`. Run `./scheduler -core /absolute/path/to/AlphaDecay -workers 4 -timeout 30s < ../astro/campaign.json > results.json`. Inputs contain a `cases` array with unique IDs and native requests. Output is an ordered array of IDs with either a native `response` or an `error`. A timeout or interrupt terminates active child processes. Individual failures remain in the result array; inspect them before using the data.
 
 ## Durable campaign runner
 

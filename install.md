@@ -2,7 +2,7 @@
 
 ## Windows
 
-Download `AlphaDecay-Windows` from a successful [Tests workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/ci.yml) run and extract the artifact, the files saved by that run. You need access to this private repository and its workflow artifacts. Run `AlphaDecay.exe` directly. It includes its catalog, report data and dependency notices. The viewer needs a working OpenGL 3.3 graphics driver. `AlphaDecay.exe --self-test` checks embedded numerical cases and `AlphaDecay.exe --credits` prints dependency notices.
+Download `AlphaDecay-Windows` from a successful [Tests workflow](https://github.com/Roonil03/AlphaDecaySimulation/actions/workflows/ci.yml) run and extract the artifact, the files saved by that run. Run `AlphaDecay.exe` directly. It includes its catalog, report data and dependency notices. The viewer needs a working OpenGL 3.3 graphics driver. `AlphaDecay.exe --self-test` checks embedded numerical cases and `AlphaDecay.exe --credits` prints dependency notices.
 
 For a source build install Git, CMake 3.21+, Rust/Cargo 1.75+ and Visual Studio with the C++ desktop workload, then:
 
@@ -33,7 +33,7 @@ ctest --test-dir build --output-on-failure
 ./build/AlphaDecay
 ```
 
-CMake fetches the pinned GLFW, Dear ImGui and nlohmann/json revisions on first configuration. The default build includes the Rust Numerov solver. `-DALPHA_ENABLE_NUMEROV=OFF` disables it. The viewer needs a graphical session. `--run` and `--self-test` need no display. An Xvfb display with Mesa can run `--render-preview` in a headless environment.
+CMake fetches the pinned GLFW, Dear ImGui and nlohmann/json revisions on first configuration. The default build includes the Rust Numerov solver. `-DALPHA_ENABLE_NUMEROV=OFF` disables it. On either platform, Python 3 is optional for building, but must be available at CMake configure time to register the `cli-contract` and `viewer-contract` CTest cases, plus `numerical-contract` when Numerov is enabled. If Python was unavailable, install it and rerun configuration before running the full test suite. The viewer needs a graphical session. `--run` and `--self-test` need no display. An Xvfb display with Mesa can run `--render-preview` in a headless environment.
 
 ## Optional research and Python compatibility tools
 
